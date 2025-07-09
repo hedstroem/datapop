@@ -1,0 +1,27 @@
+﻿---
+// src/components/BaseHead.astro
+export interface Props {
+  title: string;
+  description?: string;
+}
+const { title, description = '' } = Astro.props;
+---
+<head>
+  <!-- inline early theme setter to avoid FOUC -->
+  <script is:inline>
+    (function() {
+      const theme = localStorage.getItem('theme');
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+      }
+    })();
+  </script>
+
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="generator" content={Astro.generator} />
+  <title>{title}</title>
+  <meta name="description" content={description} />
+  <link rel="stylesheet" href="/styles/global.css" />
+</head>

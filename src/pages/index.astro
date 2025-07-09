@@ -1,16 +1,73 @@
+﻿---
+import Layout from '../layouts/Layout.astro';
+import { getCollection } from 'astro:content';
+import { ArrowRight, BarChart3, Brain, Code2 } from 'lucide-react';
+
+const posts = (await getCollection('blog'))
+  .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf())
+  .slice(0, 3);
+
+const topics = [
+  { icon: Brain,   title: "", description: "Neural networks, deep learning, and ML fundamentals" },
+  { icon: BarChart3, title: "",      description: "Statistical methods and data analysis techniques" },
+  { icon: Code2,    title: "",      description: "Optimization, data structures, and computational thinking" }
+];
 ---
 
----
+<Layout title="ML Blog - Statistics, Machine Learning & Algorithms">
+  <section class="mb-16">
+    <h1 class="font-display text-5xl font-medium md:text-4xl mb-6 leading-tight">
+    </h1>
+    <p class="text-xl text-zinc-600 dark:text-zinc-400 mb-8 max-w-2xl">
+    </p>
+    
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+      {topics.map(({ icon: Icon, title, description }) => (
+        <div class="p-6 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+          <Icon className="w-8 h-8 mb-3 text-blue-600 dark:text-blue-400" />
+          <h3 class="font-display text-lg mb-2">{title}</h3>
+          <p class="text-sm text-zinc-600 dark:text-zinc-400">{description}</p>
+        </div>
+      ))}
+    </div>
+  </section>
 
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
-	</head>
-	<body>
-		<h1>Astro</h1>
-	</body>
-</html>
+  <section>
+    <div class="flex items-center justify-between mb-8">
+      <h2 class="font-display font-thin text-2xl">Recent Posts</h2>
+      <a href="/blog" class="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+        View all →
+      </a>
+    </div>
+    
+    <div class="grid gap-8">
+      {posts.map((post) => (
+        <article class="relative p-6 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 group overflow-hidden">
+          <a href={`/blog/${post.slug}`} class="absolute inset-0 z-10" aria-label={post.data.title}></a>
+          <div
+            class="absolute -inset-4 rounded-lg bg-gradient-to-r from-blue-50 to-purple-50
+                   dark:from-blue-950/20 dark:to-purple-950/20 opacity-0
+                   group-hover:opacity-100 transition-opacity -z-10"
+          />
+          
+          <h3 class="font-display text-xl mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+            {post.data.title}
+          </h3>
+          <p class="text-zinc-600 dark:text-zinc-400 mb-3">
+            {post.data.description}
+          </p>
+          <div class="flex items-center gap-4 text-sm text-zinc-500">
+            <time datetime={post.data.pubDate.toISOString()}>
+              {post.data.pubDate.toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })}
+            </time>
+            {post.data.tags.slice(0, 2).map(tag => (
+              <span class="px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded text-xs">
+                {tag}
+              </span>
+            ))}
+          </div>
+        </article>
+      ))}
+    </div>
+  </section>
+</Layout>

@@ -1,0 +1,128 @@
+﻿---
+export interface Props {
+  images: Array<{
+    src: string;
+    alt: string;
+    caption?: string;
+  }>;
+  columns?: number;
+}
+
+const { images, columns = 2 } = Astro.props;
+const gridClass = columns === 1 ? 'grid-cols-1' : columns === 3 ? 'md:grid-cols-3' : 'md:grid-cols-2';
+const galleryId = `gallery-${Math.random().toString(36).substr(2, 9)}`;
+---
+
+<div class={`grid gap-4 my-8 grid-cols-1 ${gridClass}`} id={galleryId}>
+  {images.map((image, index) => (
+    <figure class="space-y-2 cursor-pointer" data-index={index}>
+      <img 
+        src={image.src} 
+        alt={image.alt}
+        class="w-full rounded-lg shadow-md hover:shadow-lg transition-shadow"
+        loading="lazy"
+      />
+      {image.caption && (
+        <figcaption class="text-sm text-zinc-600 dark:text-zinc-400 text-center">
+          {image.caption}
+        </figcaption>
+      )}
+    </figure>
+  ))}
+</div>
+
+<!-- Lightbox -->
+<div id={`lightbox-${galleryId}`} class="fixed inset-0 z-50 hidden bg-black/90 backdrop-blur-sm">
+  <button 
+    class="close-lightbox absolute top-4 right-4 text-white hover:text-zinc-300 transition-colors"
+    aria-label="Close lightbox"
+  >
+    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+    </svg>
+  </button>
+  <button 
+    class="prev-image absolute left-4 top-1/2 -translate-y-1/2 text-white hover:text-zinc-300 transition-colors"
+    aria-label="Previous image"
+  >
+    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+    </svg>
+  </button>
+  <button 
+    class="next-image absolute right-4 top-1/2 -translate-y-1/2 text-white hover:text-zinc-300 transition-colors"
+    aria-label="Next image"
+  >
+    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+    </svg>
+  </button>
+  <div class="flex items-center justify-center h-full p-8">
+    <img class="lightbox-image max-w-full max-h-full object-contain" src="" alt="" />
+  </div>
+  <p class="lightbox-caption absolute bottom-4 left-1/2 -translate-x-1/2 text-white text-center max-w-2xl px-4"></p>
+</div>
+
+<script define:vars={{ images, galleryId }}>
+  const gallery = document.getElementById(galleryId);
+  const lightbox = document.getElementById(`lightbox-${galleryId}`);
+  const lightboxImage = lightbox.querySelector('.lightbox-image');
+  const lightboxCaption = lightbox.querySelector('.lightbox-caption');
+  const closeBtn = lightbox.querySelector('.close-lightbox');
+  const prevBtn = lightbox.querySelector('.prev-image');
+  const nextBtn = lightbox.querySelector('.next-image');
+  
+  let currentIndex = 0;
+  
+  function openLightbox(index) {
+    currentIndex = index;
+    updateLightboxImage();
+    lightbox.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  }
+  
+  function closeLightbox() {
+    lightbox.classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+  
+  function updateLightboxImage() {
+    const image = images[currentIndex];
+    lightboxImage.src = image.src;
+    lightboxImage.alt = image.alt;
+    lightboxCaption.textContent = image.caption || '';
+  }
+  
+  function nextImage() {
+    currentIndex = (currentIndex + 1) % images.length;
+    updateLightboxImage();
+  }
+  
+  function prevImage() {
+    currentIndex = (currentIndex - 1 + images.length) % images.length;
+    updateLightboxImage();
+  }
+  
+  // Event listeners
+  gallery.querySelectorAll('figure').forEach((figure, index) => {
+    figure.addEventListener('click', () => openLightbox(index));
+  });
+  
+  closeBtn.addEventListener('click', closeLightbox);
+  prevBtn.addEventListener('click', prevImage);
+  nextBtn.addEventListener('click', nextImage);
+  
+  // Close on background click
+  lightbox.addEventListener('click', (e) => {
+    if (e.target === lightbox) closeLightbox();
+  });
+  
+  // Keyboard navigation
+  document.addEventListener('keydown', (e) => {
+    if (lightbox.classList.contains('hidden')) return;
+    
+    if (e.key === 'Escape') closeLightbox();
+    if (e.key === 'ArrowRight') nextImage();
+    if (e.key === 'ArrowLeft') prevImage();
+  });
+</script>

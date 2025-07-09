@@ -1,0 +1,149 @@
+---
+title: 'How to Write Posts'
+description: 'A guide to creating MDX posts with code, math, and images'
+pubDate: 2025-07-09
+tags: ['guide', 'mdx', 'writing']
+---
+
+import ImageGallery from '../../components/ImageGallery.astro';
+
+This guide explains how to write blog posts for this site using MDX format.
+
+## File Structure
+
+Create new posts in `src/content/blog/` with the filename format: `your-post-title.mdx`
+
+## Frontmatter
+
+Every post must start with frontmatter:
+
+```yaml
+---
+title: 'Your Post Title'
+description: 'A brief description for previews'
+pubDate: 2025-07-09
+tags: ['tag1', 'tag2', 'tag3']
+---
+```
+
+## Basic Formatting
+
+Use standard Markdown syntax:
+
+- **Bold text**: `**bold**`
+- *Italic text*: `*italic*`
+- `Inline code`: `` `code` ``
+- [Links](https://example.com): `[text](url)`
+
+## Code Blocks
+
+Use triple backticks with language specification:
+
+````markdown
+```python
+def example():
+    return "Hello, World!"
+```
+````
+
+Supported languages: `python`, `javascript`, `typescript`, `bash`, `json`, `yaml`, and more.
+
+## Mathematical Equations
+
+Use LaTeX syntax for math:
+
+Inline math: `$\alpha + \beta = \gamma$` renders as $\alpha + \beta = \gamma$
+
+Block math:
+```markdown
+$$
+\frac{\partial L}{\partial w} = \frac{1}{m} \sum_{i=1}^{m} (h_\theta(x^{(i)}) - y^{(i)}) x^{(i)}
+$$
+```
+
+Renders as:
+
+$$
+\frac{\partial L}{\partial w} = \frac{1}{m} \sum_{i=1}^{m} (h_\theta(x^{(i)}) - y^{(i)}) x^{(i)}
+$$
+
+## Images and Galleries
+
+Import the ImageGallery component at the top of your post:
+
+```markdown
+import ImageGallery from '../../components/ImageGallery.astro';
+```
+
+Then use it in your post:
+
+```jsx
+<ImageGallery 
+  images={[
+    {
+      src: "/images/example1.jpg",
+      alt: "Description of image",
+      caption: "Optional caption"
+    },
+    {
+      src: "/images/example2.jpg",
+      alt: "Another image",
+      caption: "Another caption"
+    }
+  ]}
+  columns={2}
+/>
+```
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/placeholder1.jpg",
+      alt: "A picture of a bunny",
+      caption: "What a great dog"
+    }
+  ]}
+/>
+
+
+Place images in `public/images/` folder.
+
+## Lists
+
+Ordered lists:
+1. First item
+2. Second item
+3. Third item
+
+Unordered lists:
+- First item
+- Second item
+  - Nested item
+  - Another nested item
+
+## Tables
+
+```markdown
+| Algorithm | Time Complexity | Space Complexity |
+|-----------|----------------|------------------|
+| Bubble Sort | O(n²) | O(1) |
+| Quick Sort | O(n log n) | O(log n) |
+| Merge Sort | O(n log n) | O(n) |
+```
+
+Renders as:
+
+| Algorithm | Time Complexity | Space Complexity |
+|-----------|----------------|------------------|
+| Bubble Sort | O(n²) | O(1) |
+| Quick Sort | O(n log n) | O(log n) |
+| Merge Sort | O(n log n) | O(n) |
+
+
+## Publishing
+
+1. Save your `.mdx` file in `src/content/blog/`
+2. Commit and push to GitHub
+3. Netlify will automatically deploy
+
+Your post URL will be: `/blog/your-file-name`

@@ -1,0 +1,35 @@
+﻿---
+import BaseHead from '../components/BaseHead.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import '../styles/global.css';
+
+export interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description = 'A blog about statistics, ML, and algorithms' } = Astro.props;
+---
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <BaseHead title={title} description={description} />
+  </head>
+  <body>
+    <!-- Dot texture that covers entire scrollable area -->
+    <div class="relative min-h-screen">
+      <div id="dot-texture" class="absolute inset-0 pointer-events-none z-0 opacity-10 dark:opacity-10 hidden">
+        <div class="absolute inset-0" style="background-image: radial-gradient(circle, currentColor 1px, transparent 1px); background-size: 20px 20px;"></div>
+      </div>
+      
+      <div class="relative z-10 min-h-screen flex flex-col">
+        <Header />
+        <main class="flex-grow container mx-auto px-4 py-8 max-w-4xl min-h-[calc(100vh-4rem)]">
+          <slot />
+        </main>
+        <Footer />
+      </div>
+    </div>
+  </body>

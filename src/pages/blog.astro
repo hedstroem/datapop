@@ -1,0 +1,130 @@
+﻿---
+import Layout from '../layouts/Layout.astro';
+import { getCollection } from 'astro:content';
+import { CalendarDays, ChevronDown } from 'lucide-react';
+
+const posts = (await getCollection('blog'))
+  .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
+const allTags = Array.from(new Set(posts.flatMap(p => p.data.tags))).sort();
+---
+
+<Layout title="Archive">
+  <section class="container mx-auto px-4 py-8 max-w-4xl">
+    <h1 class="font-display text-2xl font-thin mb-6">All Posts Archive</h1>
+
+    <!-- Controls -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4">
+      <input
+        id="search-input"
+        type="search"
+        placeholder="Search posts…"
+        class="
+          flex-grow px-4 py-2
+          border border-zinc-200 dark:border-zinc-700
+          bg-zinc-50 dark:bg-zinc-800
+          text-zinc-900 dark:text-zinc-100
+          placeholder-zinc-500 dark:placeholder-zinc-400
+          rounded-lg
+          focus:outline-none focus:ring focus:ring-blue-500/30
+        "
+      />
+
+      <!-- Tag select -->
+      <div class="relative">
+        <select
+          id="tag-select"
+          class="
+            appearance-none px-3 py-2 pr-8
+            border border-zinc-200 dark:border-zinc-700
+            bg-zinc-50 dark:bg-zinc-800
+            text-sm text-zinc-900 dark:text-zinc-100
+            capitalize
+            rounded-lg
+            focus:outline-none focus:ring focus:ring-blue-500/30
+          "
+        >
+          <option value="">All tags</option>
+          {allTags.map(tag => (
+            <option value={tag}>{tag}</option>
+          ))}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 dark:text-zinc-400" />
+      </div>
+    </div>
+
+    <!-- Posts List -->
+    <div id="posts-container" class="grid gap-8">
+      {posts.map((post) => {
+        const formattedDate = post.data.pubDate.toLocaleDateString('en-GB', {
+          year:  'numeric',
+          month: 'short',
+          day:   'numeric',
+        });
+        const tagList = post.data.tags.join(' ');
+        return (
+          <article
+            class="relative p-6 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 group overflow-hidden"
+            data-title={post.data.title.toLowerCase()}
+            data-description={post.data.description.toLowerCase()}
+            data-tags={tagList.toLowerCase()}
+          >
+            <a href={`/blog/${post.slug}`} class="absolute inset-0 z-10" aria-label={post.data.title}></a>
+            <div
+              class="absolute -inset-4 rounded-lg bg-gradient-to-r from-blue-50 to-purple-50
+                     dark:from-blue-950/20 dark:to-purple-950/20 opacity-0
+                     group-hover:opacity-100 transition-opacity -z-10"
+            />
+            <h2 class="font-display text-xl mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+              {post.data.title}
+            </h2>
+            <p class="text-zinc-600 dark:text-zinc-400 mb-3">{post.data.description}</p>
+            <div class="mt-4 flex items-center gap-4 text-sm text-zinc-500">
+              <div class="flex items-center gap-1">
+                <CalendarDays className="w-4 h-4" />
+                <time datetime={post.data.pubDate.toISOString()}>
+                  {formattedDate}
+                </time>
+              </div>
+              {post.data.tags.length > 0 && (
+                <div class="flex gap-2 flex-wrap">
+                  {post.data.tags.map(tag => (
+                    <span class="text-xs px-2 py-1 bg-zinc-100 dark:bg-zinc-800 rounded">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  </section>
+
+  <script type="module">
+    const postsContainer = document.getElementById('posts-container');
+    const posts = Array.from(postsContainer.children);
+    const searchInput = document.getElementById('search-input');
+    const tagSelect   = document.getElementById('tag-select');
+
+    function applyFilters() {
+      const query = searchInput.value.trim().toLowerCase();
+      const tag   = tagSelect.value.toLowerCase();
+
+      posts.forEach(post => {
+        const matchesQuery = !query ||
+          post.dataset.title.includes(query) ||
+          post.dataset.description.includes(query) ||
+          post.dataset.tags.includes(query);
+        const matchesTag = !tag || post.dataset.tags.split(' ').includes(tag);
+        post.style.display = (matchesQuery && matchesTag) ? '' : 'none';
+      });
+    }
+
+    searchInput.addEventListener('input', applyFilters);
+    tagSelect.addEventListener('change', applyFilters);
+
+    // initial render
+    applyFilters();
+  </script>
+</Layout>
