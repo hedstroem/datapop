@@ -30,17 +30,18 @@ const allTags = Array.from(new Set(posts.flatMap(p => p.data.tags))).sort();
       />
 
       <!-- Tag select -->
-      <div class="relative">
+      <div class="relative inline-block w-full max-w-xs">
         <select
           id="tag-select"
           class="
-            appearance-none px-3 py-2 pr-8
+            appearance-none w-full
+            px-3 py-2
             border border-zinc-200 dark:border-zinc-700
             bg-zinc-50 dark:bg-zinc-800
             text-sm text-zinc-900 dark:text-zinc-100
-            capitalize
-            rounded-lg
+            capitalize rounded-lg
             focus:outline-none focus:ring focus:ring-blue-500/30
+            pr-10
           "
         >
           <option value="">All tags</option>
@@ -48,13 +49,13 @@ const allTags = Array.from(new Set(posts.flatMap(p => p.data.tags))).sort();
             <option value={tag}>{tag}</option>
           ))}
         </select>
-        <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 dark:text-zinc-400" />
+        <ChevronDown className="pointer-events-none absolute inset-y-0 right-3 my-auto w-4 h-4 text-zinc-500 dark:text-zinc-400" />
       </div>
     </div>
 
     <!-- Posts List -->
     <div id="posts-container" class="grid gap-8">
-      {posts.map((post) => {
+      {posts.map(post => {
         const formattedDate = post.data.pubDate.toLocaleDateString('en-GB', {
           year:  'numeric',
           month: 'short',
@@ -78,10 +79,10 @@ const allTags = Array.from(new Set(posts.flatMap(p => p.data.tags))).sort();
               {post.data.title}
             </h2>
             <p class="text-zinc-600 dark:text-zinc-400 mb-3">{post.data.description}</p>
-            <div class="mt-4 flex items-center gap-4 text-sm text-zinc-500">
+            <div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-zinc-500">
               <div class="flex items-center gap-1">
                 <CalendarDays className="w-4 h-4" />
-                <time datetime={post.data.pubDate.toISOString()}>
+                <time class="whitespace-nowrap" datetime={post.data.pubDate.toISOString()}>
                   {formattedDate}
                 </time>
               </div>
