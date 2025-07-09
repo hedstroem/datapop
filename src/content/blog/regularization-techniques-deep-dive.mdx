@@ -1,0 +1,80 @@
+---
+title: 'Mastering Regularization in Machine Learning'
+description: 'A deep dive into L1, L2, and dropout regularization techniques for robust model training.'
+pubDate: 2025-03-10
+tags: ['machine-learning', 'regularization', 'stability']
+---
+
+import ImageGallery from '../../components/ImageGallery.astro';
+
+Regularization is a fundamental set of techniques in machine learning that improve model generalization by discouraging overly complex or overfitted solutions. When a model learns both the underlying pattern and noise in the training data, it performs poorly on new, unseen data. Regularization methods add constraints or penalties during training to prevent this overfitting.
+
+### L2 Regularization (Ridge)
+
+L2 regularization adds a penalty proportional to the square of the magnitude of model weights. The modified cost function for linear regression becomes:
+
+$$
+J(\theta) = \frac{1}{2m} \sum_{i=1}^m (h_{\theta}(x^{(i)}) - y^{(i)})^2 + \frac{\lambda}{2m} \sum_{j=1}^n \theta_j^2
+$$
+
+Where:
+- $\lambda$ controls the strength of the penalty
+- Larger $\lambda$ shrinks weights towards zero, smoothing the model
+
+```python
+# L2 Regularized Linear Regression using scikit-learn
+from sklearn.linear_model import Ridge
+
+X_train, X_test, y_train, y_test = ...  # your data split
+model = Ridge(alpha=1.0)  # alpha = lambda
+model.fit(X_train, y_train)
+print("Test R²:", model.score(X_test, y_test))
+```
+
+### L1 Regularization (Lasso)
+
+L1 regularization adds a penalty proportional to the absolute value of weights. This can drive some parameters to exactly zero, performing feature selection as well as regularization:
+
+$$
+J(\theta) = \frac{1}{2m} \sum_{i=1}^m (h_{\theta}(x^{(i)}) - y^{(i)})^2 + \frac{\lambda}{m} \sum_{j=1}^n |\theta_j|
+$$
+
+### Dropout in Neural Networks
+
+Dropout randomly sets a fraction $p$ of neuron outputs to zero during each training batch, preventing co-adaptation of features. At inference, outputs are scaled by $(1-p)$:
+
+```python
+import tensorflow as tf
+from tensorflow.keras import layers, models
+
+model = models.Sequential([
+    layers.Dense(128, activation='relu', input_shape=(input_dim,)),
+    layers.Dropout(0.5),
+    layers.Dense(64, activation='relu'),
+    layers.Dropout(0.5),
+    layers.Dense(num_classes, activation='softmax')
+])
+```
+
+<ImageGallery
+  images={[
+    {
+      src: '/images/placeholder2.jpg',
+      alt: 'Comparison of decision boundaries with L2 regularization',
+      caption: 'L2 shrinks coefficients evenly'
+    },
+    {
+      src: '/images/placeholder2.jpg',
+      alt: 'Coefficient sparsity via L1 regularization',
+      caption: 'L1 zeros out less important features'
+    }
+  ]}
+/>
+
+### Choosing the Right Method
+
+- **L2** is good for large feature sets where you want to keep all features but penalize extreme weights.  
+- **L1** is ideal when you suspect many features are irrelevant — it performs automatic feature selection.  
+- **Dropout** is essential in deep neural networks to avoid interdependent feature activations.
+
+Proper use of regularization often involves grid search or cross-validation to tune $\lambda$ or dropout rate. By understanding these techniques and their trade-offs, you’ll be able to build more robust, generalizable models across a variety of tasks.
