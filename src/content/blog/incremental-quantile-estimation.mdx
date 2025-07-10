@@ -1,0 +1,43 @@
+---
+title: 'Incremental quantiles'
+description: 'First post'
+pubDate: 2025-07-10
+tags: ['statistics']
+---
+
+import ImageGallery from '../../components/ImageGallery.astro';
+
+A couple of years ago I thought to myself:
+
+*"I know how to estimate a moving average, but how does one estimate a moving median?"*
+
+This was an interesting question because while moving averages are great, they still suffer greatly from outliers. 
+This led me down a track that ended on a stack overflow thread of incremental median esimation, and by extension, any quantile.
+The algorithm is simple and uses a frequency approach to the problem.
+
+In a nutshell, if the distribution is stationary then we expect a 50/50 split of higher and lower observations around our median.
+The way we translate this into an algorithm is that higher/lower nudges our median estimate, and if the higher/lower observations are in balance then the nudges cancel out.
+
+```python
+def update_median_estimate(
+        median_estimate: float, 
+        observation: float, 
+        nudge: float
+    ) -> float:
+    diff = median_estimate - observation
+    sign = diff / abs(diff)
+    new_median_estimate = median_estimate - nudge * sign
+    return new_median_estimate
+```
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/test.png",
+      alt: "A picture of a bunny",
+      caption: "What a great dog"
+    }
+  ]}
+/>
+
+...
