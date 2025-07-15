@@ -1,0 +1,125 @@
+---
+title: 'Incremental median'
+description: 'How to estimate the median of steaming data'
+pubDate: 2025-07-15
+tags: ['statistics', 'streaming data']
+---
+
+import { Image } from 'astro:assets';
+
+
+A couple of years ago I thought to myself:
+
+*"I know how to estimate a cumulative average, but how does one estimate the median in the same way?"*
+
+This was an interesting question because while averages are great, they still suffer greatly from outliers. 
+This led me down a track that ended on a stack overflow thread of cumulative median esimation, and by extension, any quantile.
+The algorithm is simple and uses a frequency approach to the problem.
+
+In a nutshell, if the distribution is stationary then we expect a 50/50 split of higher and lower observations around our median.
+The way we translate this into an algorithm is that higher/lower nudges our median estimate, and if the higher/lower observations are in balance then the nudges cancel out.
+It can be coded up as this:
+
+```python
+def update_median_estimate(
+        median_estimate: float, 
+        observation: float, 
+        nudge: float
+    ) -> float:
+    diff = median_estimate - observation
+    sign = diff / abs(diff)
+    new_median_estimate = median_estimate - nudge * sign
+    return new_median_estimate
+```
+
+The median estimate can just be initialized to the first observation. This leave the nudge factor as a parameter. Here is a graph of the median estimations applied to Gaussian noise with two different nudges:
+
+![Two incremental median estimations](/images/inc_1.png)
+
+Note that nudge = 0.1 makes the estimate converge quicker than nudge = 0.01, but, the trade-off is that it is also more sensitive to noise. So, what is a good nudge factor?
+
+One way is to approach is heuristically; say that we expect the estimator to approximately reach the median in M steps. 
+Since the median is the 50th quantile; a worst case scenario where we start at the min or max means that we have to step 50 quantiles. 
+This means that we could choose $\frac{max(max - median,\: median - min)}{M}$ as the nudge factor. 
+Since we do not know the median we can use the range $R = max - min$ as an upper bound $\frac{R}{M}$. This is an extreme scenario where the median is close to either the min or max.
+For the uniform scenario where the median lies dead in the middle between min and max it is twice as big, so then we will get to our estimate in $\frac{M}{2}$ steps.
+
+![Incrementally estimating max and min](/images/inc_2.png)
+
+With this method we have a bit more control, as can be seen in the following graph:
+
+![Comparison of different R/M nudges](/images/inc_3.png)
+
+Eyeballing this particular example gives the M = 30, 16 steps and M = 120, 91 steps to get to the sample median. 
+Now, there additional steps we can take to ensure a fair(er) nudging toward the median and it relates to $R$.
+We do not expect our estimate of R to be close to the truth after only 3 or 10 observations, so what do we expect it to be and can we correct for that?
+
+For $n$ samples selected uniformly on the interval [0,1) the expectation of the maximum is $\frac{n}{n+1}$ and the minimum is $\frac{1}{n+1}$.
+This means the expectation of the range is
+$$
+E(R|n) = \frac{n}{n+1} - \frac{1}{n+1} = \frac{n-1}{n+1}.
+$$
+
+The intuition behind this is that $n$ samples split the line into $n+1$ sections and ordering them by size gives $1$ and $n$ as the first and final sections.
+Of course, our data is not likely uniformly distributed, but the quantiles are by definition.
+This means that after, for example $n = 9$, we would have expected to seen 10% and 90% quantile with an 80 quantile range.
+By $n = 99$ we will have seen from the 1% to the 99% quantile and subsequently the $n = 999$ sample gives us 0.1% to 99.9% quantile.
+There are two take-aways from this observation.
+
+The first is that we can invert the formula $R = \frac{n-1}{n+1} \rightarrow n = -\frac{R+1}{R-1}$.
+This is handy if we are looking for a specific quantile $q$, it corresponds to the range $R_q = 1-2q$ and by our formula $n = \frac{1-q}{q}$. 
+This only makes sense for $q < 0.5$ so for $q > 0.5$ we find its mirrored buddy $\tilde{q} = 1 - q$. 
+Now, specifically for the median this collapses to $n = 1$ but if we are going to look at any quantile then this will come in handy (like later in this post).
+In essence, this estimate of $n$ will tell you when we it is likely to have seen the quantile we are estimating.
+
+The second take away is that we can use the formula to create a better estimate $R_n$ out of our naive incremental $R$ as $R_n = \frac{R}{\frac{n-1}{n+1}} = \frac{R(n+1)}{n-1}$. 
+This means that the range will scaled up to conpensate for likely unobserved range. This means that the full nudge heuristic is now $\frac{R(n+1)}{M(n-1)}$. 
+See two examples below of the difference, one cherry-picked (note that the correction is only relevant when we need the nudges to be large) and one regular:
+
+![Example 1 of improved convergence](/images/inc_4.png)
+
+![Example 2 of improved convergence](/images/inc_5.png)
+
+It is not much but it is something.
+
+The elephant in the room are the variations in the estimate. 
+Since we are observing random noise the estimates will follow the random sequences of nudges like a random walk.
+What we know about random walks of $n$ steps is that the expectation $E(\mathcal{Z}_n) = 0$ with the variance $E(\mathcal{Z}_n^2) = n$.
+So if we have a random walk then we would expect the standard deviation to grow like $\sqrt{n}$, meaning that we should shrink the nudges to compensate for this effect.
+Of course, we would only apply this after $M$ steps, when we have actually expected to converge to the median.
+
+![Test of random walk penalty of the nudge amplitude](/images/inc_6.png)
+
+And for a change, let us look at another distribution, like an exponential:
+
+![Test of random walk penalty of the nudge amplitude on an exponential distribution](/images/inc_7.png)
+
+But, our system is not a true random walk because is it still an approximation of the median, so it will have some drift towards the true distribution median. 
+Say that we are targeting the $q_t$ quantile (0.5 in case of the median) with $dq$ nudges (0.1 for our example) of our estimate $q$. 
+If $q = q_t$ then we have a 50/50 of being nudged in either direction, say + happens, then we are at $q + dq$. 
+This has now shifted the probabilities as we now have a 40/60 chance in favor of going back towards $q_t$.
+If + happens again then we are at $q + 2dq$, meaning now a 30/70 chance next time. 
+The most extreme scenario has $dq = q_t$ when $q_t = 0.5$ as it always reverses its previous step, meaning that the distribution is 0: 25%, $q_t$: 50%, 1: 25%.
+
+Of course, we want to be able to assume any $dq$. 
+To get an intution behind this we simulated using $dq = \frac{1}{50}$ and noted that is approximated a Gaussian distribution.
+In the limit where $dq \rightarrow 0$ it makes sense because then the drift back towards the median is less dominant. 
+![Histogram of quantile estimations](/images/inc_8.png)
+
+We run more experiments with different fractions of $\frac{dq}{q_t}$, calculate the standard deviation, resulting in:
+![Experiments logging standard deviation of quantile estimations as a function of dq/qt](/images/inc_9.png)
+
+The curve fitting is easy as it is a square root of the fraction and $x = 0.5$ neatly intersects $y = 0.25$. 
+This means that empirically we have arrived at the rubber band random walk standard deviation $\sigma = \frac{1}{\sqrt{8}}\sqrt{\frac{dq}{q_t}} = \sqrt{\frac{dq}{8q_t}}$. 
+Note that this does not depend on $n$, which we conjectured above. 
+Simiarly to what we have done before, we can shuffle expressions around to find the fraction given a target standard deviation $\sigma$ as $\frac{dq}{q_t} = 8\sigma^2$.
+If we were to calibrate a 95% confidence interval ($\pm 1.96\sigma$) over $\pm 0.01$ quantiles ($\rightarrow \sigma = \frac{0.01}{1.96}$) then $\frac{dq}{q_t} \approx 0.00021 \rightarrow dq = 1/9604$ ($q_t = 0.5$).
+For a more liberal $\pm 0.025$ quantiles $\frac{dq}{q_t} \approx 0.0013 \rightarrow dq = 1/1536.64$.
+
+![Example 1 of random walk confidence interval nudges](/images/inc_10.png)
+
+![Example 2 of random walk confidence interval nudges](/images/inc_11.png)
+
+That has (kind-of) solved it! Now there are two possibilities to take this further, the first is to generalize to any quantile and the second is to adress non-stationarity.
+
+But we save those for later posts :)
