@@ -6,30 +6,86 @@ export interface Props {
     caption?: string;
   }>;
   columns?: number;
+  layout?: 'grid' | 'carousel';
 }
 
-const { images, columns = 2 } = Astro.props;
+const { images, columns = 2, layout = 'grid' } = Astro.props;
 const gridClass = columns === 1 ? 'grid-cols-1' : columns === 3 ? 'md:grid-cols-3' : 'md:grid-cols-2';
 const galleryId = `gallery-${Math.random().toString(36).substr(2, 9)}`;
 ---
 
-<div class={`grid gap-4 my-8 grid-cols-1 ${gridClass}`} id={galleryId}>
-  {images.map((image, index) => (
-    <figure class="space-y-2 cursor-pointer" data-index={index}>
-      <img 
-        src={image.src} 
-        alt={image.alt}
-        class="w-full rounded-lg shadow-md hover:shadow-lg transition-shadow"
-        loading="lazy"
-      />
-      {image.caption && (
-        <figcaption class="text-sm text-zinc-600 dark:text-zinc-400 text-center">
-          {image.caption}
-        </figcaption>
-      )}
-    </figure>
-  ))}
-</div>
+{layout === 'grid' ? (
+  <div class={`grid gap-4 my-8 grid-cols-1 ${gridClass}`} id={galleryId}>
+    {images.map((image, index) => (
+      <figure class="space-y-2 cursor-pointer" data-index={index}>
+        <img 
+          src={image.src} 
+          alt={image.alt}
+          class="w-full rounded-lg shadow-md hover:shadow-lg transition-shadow"
+          loading="lazy"
+        />
+        {image.caption && (
+          <figcaption class="text-sm text-zinc-600 dark:text-zinc-400 text-center">
+            {image.caption}
+          </figcaption>
+        )}
+      </figure>
+    ))}
+  </div>
+) : (
+  <div class="my-8 relative" id={galleryId}>
+    <div class="relative overflow-hidden rounded-lg">
+      <div class="flex transition-transform duration-300 ease-in-out carousel-track">
+        {images.map((image, index) => (
+          <div class="w-full flex-shrink-0 px-2" data-index={index}>
+            <figure class="space-y-2">
+              <img 
+                src={image.src} 
+                alt={image.alt}
+                class="w-full rounded-lg shadow-md cursor-pointer"
+                loading="lazy"
+              />
+              {image.caption && (
+                <figcaption class="text-sm text-zinc-600 dark:text-zinc-400 text-center">
+                  {image.caption}
+                </figcaption>
+              )}
+            </figure>
+          </div>
+        ))}
+      </div>
+    </div>
+    
+    <!-- Carousel controls -->
+    <button 
+      class="carousel-prev absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-sm rounded-full p-2 shadow-lg hover:bg-white dark:hover:bg-zinc-700 transition-colors"
+      aria-label="Previous image"
+    >
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+      </svg>
+    </button>
+    <button 
+      class="carousel-next absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-sm rounded-full p-2 shadow-lg hover:bg-white dark:hover:bg-zinc-700 transition-colors"
+      aria-label="Next image"
+    >
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+      </svg>
+    </button>
+    
+    <!-- Dots indicator -->
+    <div class="flex justify-center gap-2 mt-4">
+      {images.map((_, index) => (
+        <button 
+          class={`w-2 h-2 rounded-full transition-colors carousel-dot ${index === 0 ? 'bg-zinc-600 dark:bg-zinc-400' : 'bg-zinc-300 dark:bg-zinc-600'}`}
+          data-index={index}
+          aria-label={`Go to image ${index + 1}`}
+        />
+      ))}
+    </div>
+  </div>
+)}
 
 <!-- Lightbox -->
 <div id={`lightbox-${galleryId}`} class="fixed inset-0 z-50 hidden bg-black/90 backdrop-blur-sm">
@@ -63,7 +119,7 @@ const galleryId = `gallery-${Math.random().toString(36).substr(2, 9)}`;
   <p class="lightbox-caption absolute bottom-4 left-1/2 -translate-x-1/2 text-white text-center max-w-2xl px-4"></p>
 </div>
 
-<script define:vars={{ images, galleryId }}>
+<script define:vars={{ images, galleryId, layout }}>
   const gallery = document.getElementById(galleryId);
   const lightbox = document.getElementById(`lightbox-${galleryId}`);
   const lightboxImage = lightbox.querySelector('.lightbox-image');
@@ -74,6 +130,7 @@ const galleryId = `gallery-${Math.random().toString(36).substr(2, 9)}`;
   
   let currentIndex = 0;
   
+  // Lightbox functions
   function openLightbox(index) {
     currentIndex = index;
     updateLightboxImage();
@@ -96,18 +153,101 @@ const galleryId = `gallery-${Math.random().toString(36).substr(2, 9)}`;
   function nextImage() {
     currentIndex = (currentIndex + 1) % images.length;
     updateLightboxImage();
+    if (layout === 'carousel') updateCarousel();
   }
   
   function prevImage() {
     currentIndex = (currentIndex - 1 + images.length) % images.length;
     updateLightboxImage();
+    if (layout === 'carousel') updateCarousel();
   }
   
-  // Event listeners
-  gallery.querySelectorAll('figure').forEach((figure, index) => {
-    figure.addEventListener('click', () => openLightbox(index));
-  });
+  // Carousel functions
+  function updateCarousel() {
+    if (layout === 'carousel') {
+      const track = gallery.querySelector('.carousel-track');
+      const dots = gallery.querySelectorAll('.carousel-dot');
+      
+      track.style.transform = `translateX(-${currentIndex * 100}%)`;
+      
+      dots.forEach((dot, index) => {
+        if (index === currentIndex) {
+          dot.classList.add('bg-zinc-600', 'dark:bg-zinc-400');
+          dot.classList.remove('bg-zinc-300', 'dark:bg-zinc-600');
+        } else {
+          dot.classList.remove('bg-zinc-600', 'dark:bg-zinc-400');
+          dot.classList.add('bg-zinc-300', 'dark:bg-zinc-600');
+        }
+      });
+    }
+  }
   
+  // Event listeners for grid layout
+  if (layout === 'grid') {
+    gallery.querySelectorAll('figure').forEach((figure, index) => {
+      figure.addEventListener('click', () => openLightbox(index));
+    });
+  }
+  
+  // Event listeners for carousel layout
+  if (layout === 'carousel') {
+    const track = gallery.querySelector('.carousel-track');
+    const prevCarouselBtn = gallery.querySelector('.carousel-prev');
+    const nextCarouselBtn = gallery.querySelector('.carousel-next');
+    const dots = gallery.querySelectorAll('.carousel-dot');
+    
+    // Click on image opens lightbox
+    track.querySelectorAll('img').forEach((img, index) => {
+      img.addEventListener('click', () => openLightbox(index));
+    });
+    
+    // Carousel navigation
+    prevCarouselBtn?.addEventListener('click', () => {
+      currentIndex = (currentIndex - 1 + images.length) % images.length;
+      updateCarousel();
+    });
+    
+    nextCarouselBtn?.addEventListener('click', () => {
+      currentIndex = (currentIndex + 1) % images.length;
+      updateCarousel();
+    });
+    
+    // Dot navigation
+    dots.forEach((dot, index) => {
+      dot.addEventListener('click', () => {
+        currentIndex = index;
+        updateCarousel();
+      });
+    });
+    
+    // Touch/swipe support
+    let touchStartX = 0;
+    let touchEndX = 0;
+    
+    track?.addEventListener('touchstart', (e) => {
+      touchStartX = e.changedTouches[0].screenX;
+    });
+    
+    track?.addEventListener('touchend', (e) => {
+      touchEndX = e.changedTouches[0].screenX;
+      handleSwipe();
+    });
+    
+    function handleSwipe() {
+      if (touchEndX < touchStartX - 50) {
+        // Swipe left
+        currentIndex = (currentIndex + 1) % images.length;
+        updateCarousel();
+      }
+      if (touchEndX > touchStartX + 50) {
+        // Swipe right
+        currentIndex = (currentIndex - 1 + images.length) % images.length;
+        updateCarousel();
+      }
+    }
+  }
+  
+  // Lightbox event listeners
   closeBtn.addEventListener('click', closeLightbox);
   prevBtn.addEventListener('click', prevImage);
   nextBtn.addEventListener('click', nextImage);
