@@ -1,16 +1,16 @@
 ﻿---
 import Layout from '../layouts/Layout.astro';
 import { getCollection } from 'astro:content';
-import { ArrowRight, BarChart3, Brain, Code2 } from 'lucide-react';
+import { ArrowRight, BarChart3, Baby, MessageCircleQuestionMark } from 'lucide-react';
 
 const posts = (await getCollection('blog'))
   .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf())
   .slice(0, 3);
 
 const topics = [
-  { icon: Brain,   title: "", description: "Neural networks, deep learning, and ML fundamentals" },
-  { icon: BarChart3, title: "",      description: "Statistical methods and data analysis techniques" },
-  { icon: Code2,    title: "",      description: "Optimization, data structures, and computational thinking" }
+  { icon: Baby,   title: "", description: "This started as my paternity leave blog. It is a place to write down what wanders my mind." },
+  { icon: BarChart3, title: "",      description: "I'm interested in data, statistics, algorithms, engineering, people, business and leadership." },
+  { icon: MessageCircleQuestionMark ,    title: "",      description: "As of now, there is no plan." }
 ];
 ---
 
