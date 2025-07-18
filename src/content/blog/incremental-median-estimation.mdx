@@ -6,7 +6,7 @@ tags: ['statistics', 'streaming data']
 ---
 
 import { Image } from 'astro:assets';
-
+import ImageGallery from '../../components/ImageGallery.astro';
 
 A couple of years ago I thought to myself:
 
@@ -76,9 +76,22 @@ The second take away is that we can use the formula to create a better estimate 
 This means that the range will scaled up to conpensate for likely unobserved range. This means that the full nudge heuristic is now $\frac{R(n+1)}{M(n-1)}$. 
 See two examples below of the difference, one cherry-picked (note that the correction is only relevant when we need the nudges to be large) and one regular:
 
-![Example 1 of improved convergence](/images/inc_4.png)
-
-![Example 2 of improved convergence](/images/inc_5.png)
+<ImageGallery 
+  images={[
+    {
+      src: "/images/inc_4.png",
+      alt: "Improved convergence example 1",
+      caption: "Cherry-picked example"
+    },
+    {
+      src: "/images/inc_5.png",
+      alt: "Improved convergence example 2",
+      caption: "Regular convergence"
+    },
+  ]}
+  columns={2}
+  layout="carousel"
+/>
 
 It is not much but it is something.
 
@@ -88,11 +101,22 @@ What we know about random walks of $n$ steps is that the expectation $E(\mathcal
 So if we have a random walk then we would expect the standard deviation to grow like $\sqrt{n}$, meaning that we should shrink the nudges to compensate for this effect.
 Of course, we would only apply this after $M$ steps, when we have actually expected to converge to the median.
 
-![Test of random walk penalty of the nudge amplitude](/images/inc_6.png)
-
-And for a change, let us look at another distribution, like an exponential:
-
-![Test of random walk penalty of the nudge amplitude on an exponential distribution](/images/inc_7.png)
+<ImageGallery 
+  images={[
+    {
+      src: "/images/inc_6.png",
+      alt: "Test of random walk penalty of the nudge amplitude",
+      caption: "Example 1: Gaussian"
+    },
+    {
+      src: "/images/inc_7.png",
+      alt: "Test of random walk penalty of the nudge amplitude on an exponential distribution",
+      caption: "Example 2: Exponential"
+    },
+  ]}
+  columns={2}
+  layout="carousel"
+/>
 
 But, our system is not a true random walk because is it still an approximation of the median, so it will have some drift towards the true distribution median. 
 Say that we are targeting the $q_t$ quantile (0.5 in case of the median) with $dq$ nudges (0.1 for our example) of our estimate $q$. 
@@ -116,9 +140,22 @@ Simiarly to what we have done before, we can shuffle expressions around to find 
 If we were to calibrate a 95% confidence interval ($\pm 1.96\sigma$) over $\pm 0.01$ quantiles ($\rightarrow \sigma = \frac{0.01}{1.96}$) then $\frac{dq}{q_t} \approx 0.00021 \rightarrow dq = 1/9604$ ($q_t = 0.5$).
 For a more liberal $\pm 0.025$ quantiles $\frac{dq}{q_t} \approx 0.0013 \rightarrow dq = 1/1536.64$.
 
-![Example 1 of random walk confidence interval nudges](/images/inc_10.png)
-
-![Example 2 of random walk confidence interval nudges](/images/inc_11.png)
+<ImageGallery 
+  images={[
+    {
+      src: "/images/inc_10.png",
+      alt: "Example 1 of random walk confidence interval nudges",
+      caption: "Example 1"
+    },
+    {
+      src: "/images/inc_11.png",
+      alt: "Example 2 of random walk confidence interval nudges",
+      caption: "Example 2"
+    },
+  ]}
+  columns={2}
+  layout="carousel"
+/>
 
 That has (kind-of) solved it! Now there are two possibilities to take this further, the first is to generalize to any quantile and the second is to adress non-stationarity.
 
