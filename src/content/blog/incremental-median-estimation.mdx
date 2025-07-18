@@ -68,7 +68,7 @@ There are two take-aways from this observation.
 The first is that we can invert the formula $R = \frac{n-1}{n+1} \rightarrow n = -\frac{R+1}{R-1}$.
 This is handy if we are looking for a specific quantile $q$, it corresponds to the range $R_q = 1-2q$ and by our formula $n = \frac{1-q}{q}$. 
 This only makes sense for $q < 0.5$ so for $q > 0.5$ we find its mirrored buddy $\tilde{q} = 1 - q$. 
-Now, specifically for the median this collapses to $n = 1$ but if we are going to look at any quantile then this will come in handy (like later in this post).
+Now, specifically for the median this collapses to $n = 1$ but if we are going to look at any quantile then this will come in handy.
 In essence, this estimate of $n$ will tell you when we it is likely to have seen the quantile we are estimating.
 
 The second take away is that we can use the formula to create a better estimate $R_n$ out of our naive incremental $R$ as $R_n = \frac{R}{\frac{n-1}{n+1}} = \frac{R(n+1)}{n-1}$. 
