@@ -1,0 +1,327 @@
+---
+title: 'Incremental quantile estimation'
+description: 'How to estimate any quantile of steaming data'
+pubDate: 2025-07-18
+tags: ['statistics', 'streaming data']
+---
+
+import ImageGallery from '../../components/ImageGallery.astro';
+
+This post continues from the incremental median estimation.
+
+To estimate any quantile instead of the median one adds a bias to the sign of the nudge.
+What does this represent? 
+Consider the case of the 90th percentile, if our estimate is accurate then we expect 90% of the incoming observations to be below the estimate.
+This means that the 90 / 10 split must be the equilibrium between the 90% downward nudges and 10% upward nudges.
+The bias $b = 1 - 2q$ for the 90% percentile is $b = -0.8$, this means that a positive sign $\rightarrow 0.2$ and a negative $\rightarrow -1.8$.
+If we multiply these nudges by their frequency we see that they are in balance: $0.9 \cdot 0.2 + 0.1 \cdot -1.8 = 0.18 - 0.18 = 0$.
+
+One thing to note is that the average absolute nudge is $0.18 + 0.18 = 0.36$, which is lower than $\|0.5 \cdot 1\| + \|0.5 \cdot -1\| = 1.0$ for the median.
+This means that if we use a bias we also want to scale the size of the nudge by the inverse of $s_b = 4\tilde{q}(1-\tilde{q})$ where $\tilde{q} = min(q, 1-q)$. 
+This means that an updated algorithm can be written as:
+
+```python
+def update_quantile_estimate(
+        quantile_to_estimate: float,
+        quantile_estimate: float, 
+        observation: float, 
+        nudge: float
+    ) -> float:
+    bias = 1 - 2 * quantile_to_estimate
+    q_tilde = min(quantile_to_estimate, 1-quantile_to_estimate)
+    scale_bias = 4*q_tilde*(1-q_tilde)
+    diff = quantile_estimate - observation
+    sign = diff / abs(diff)
+    new_quantile_estimate = quantile_estimate - nudge * (sign + bias) / scale_bias
+    return new_quantile_estimate
+```
+
+The nudges can utilize the same schema as for the median $\frac{R(n+1)}{M(n-1)}$ for quick converge.
+But the rubber band random walk confidence interval $\frac{dq}{\tilde{q_t}q_t} = 8\sigma^2$ that we empirically derived is no longer applicable.
+On top of the rubber band (pulling us toward the quantile estimate when we drift to far) and the random walk (because the observations are random in nature) aspects, we also now have a drift (bias) to account for.
+
+After repeating the experiment for different values of $q$ and refit the function we find that actually $\frac{dq}{\tilde{q_t}} = \frac{4\sigma^2}{\tilde{q_t}}$.
+This means that $dq$ is actually $q$-invariant and that the simplified formula gives $dq = 4\sigma^2$ and that the $\pm 2.5$ percentile CI $\rightarrow M = 1536.4$ is universal.
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/incremental_quantile/incremental_quantile_1.png",
+      alt: "Example of incremental quantile estimation",
+      caption: "Example of incremental quantile estimation"
+    },
+    {
+      src: "/images/incremental_quantile/incremental_quantile_2.png",
+      alt: "Example of incremental quantile estimation",
+      caption: "Example of incremental quantile estimation"
+    },
+    {
+      src: "/images/incremental_quantile/incremental_quantile_3.png",
+      alt: "Example of incremental quantile estimation",
+      caption: "Example of incremental quantile estimation"
+    },
+    {
+      src: "/images/incremental_quantile/incremental_quantile_4.png",
+      alt: "Example of incremental quantile estimation",
+      caption: "Example of incremental quantile estimation"
+    },
+    {
+      src: "/images/incremental_quantile/incremental_quantile_5.png",
+      alt: "Example of incremental quantile estimation",
+      caption: "Example of incremental quantile estimation"
+    }
+  ]}
+  layout="carousel"
+/>
+
+Note that the $q = 0.01$ quantile looks a bit jumpy and $q = 0.999$ even more so. 
+That is because we have so few observations, meaning that the nudges become highly unbalanced.
+Another factor is the fact that we used $\pm 2.5$ percentile confidence interval for something like the 1st percentile.
+So we accept quite a lot of noise in our estimate.
+Here is how the estimation of $q = 0.999$ looks for 10000 observations:
+
+![Example of incremental quantile estimation](/images/incremental_quantile/incremental_quantile_6.png)
+
+If one counts the upward jumps one gets 11, which is close to the expected value of $(1-0.999) \cdot 10000 = 10$.
+There are some potential remedies for this, the first one is to adjust the confidence interval to match the quantile.
+This would mean that $dq = 4\sigma^2 = 4(\frac{0.001}{1.96})^2 = \frac{1}{960400}$.
+This first approach will do the trick but it will take forever to converge.
+
+The second potential remedy is just a sanity check. *Why are we allowing the quantile estimate to go beyond our maximum or minimum observed value?*
+This was not a problem for the median estimation but here it is clearly an issue.
+By bounding the estimate one gets something that looks like this.
+![Example of incremental quantile estimation](/images/incremental_quantile/incremental_quantile_7.png)
+
+However, this leaves an issue on how to deal with the excess as it is required to balance the downward nudges.
+If one allows the excess to carry over and nullify the opposite nudges then one ends up with flat segments like this.
+![Example of incremental quantile estimation](/images/incremental_quantile/incremental_quantile_8.png)
+
+Neither of these are that satisfactory because they do not solve the jumpiness at its core.
+We should also state that the extreme quantiles are something we will rarely need.
+Let us focus on another aspect of quantile estimation and we might be able to resove the issue in another way.
+
+The jumpiness fundamentally comes from our frequentist approach to estimating the quantiles.
+To approach the problem from a Bayesian point of view we can attempt correct our frequentist estimator $\hat{q}$.
+The $\pm$ signs $x_i$ around our estimator $\hat{q}$ follow a Bernoulli distribution $x_1, ..., x_n \sim$ Bernoulli($p$). 
+The beta distribution $\beta(a,b)$ is a conjugate prior distribution to Bernoulli($p$).
+The posterior distibution becomes $p\:|\:x_1, ..., x_n \sim \beta(a + s,b + t)$, where $s$ are the number of successes and $t$ the total number of observations.
+This means that $E(p\:|\:x_1, ..., x_n) = \frac{a + s}{a + b + t}$.
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/incremental_quantile/incremental_quantile_9.png",
+      alt: "Example of Bayesian posterior of quantile estimate",
+      caption: "Example of Bayesian posterior of quantile estimate"
+    },
+    {
+      src: "/images/incremental_quantile/incremental_quantile_10.png",
+      alt: "Example of Bayesian posterior of quantile estimate",
+      caption: "Example of Bayesian posterior of quantile estimate"
+    },
+    {
+      src: "/images/incremental_quantile/incremental_quantile_11.png",
+      alt: "Example of Bayesian posterior of quantile estimate",
+      caption: "Example of Bayesian posterior of quantile estimate"
+    }
+  ]}
+  layout="carousel"
+/>
+
+One way to use this is to track $|E(p\:|\:x_1, ..., x_n) - q|$ and use that to slow down the nudges.
+The rescale nudges $u$ could be $u_{new} = u\frac{|E(p\:|\:x_1, ..., x_n) - q|}{min(\tilde{q},\:1.96\sigma)}$. 
+This means that is $E(p) = q$ then we stop nudging altogether and we have normal nudges when we are outside the confidence interval determined by our $\sigma$ hyperparameter.
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/incremental_quantile/incremental_quantile_12.png",
+      alt: "Using posterior of quantile estimate to slow down convergence",
+      caption: "Using posterior of quantile estimate to slow down convergence"
+    },
+    {
+      src: "/images/incremental_quantile/incremental_quantile_13.png",
+      alt: "Using posterior of quantile estimate to slow down convergence",
+      caption: "Using posterior of quantile estimate to slow down convergence"
+    },
+    {
+      src: "/images/incremental_quantile/incremental_quantile_14.png",
+      alt: "Using posterior of quantile estimate to slow down convergence",
+      caption: "Using posterior of quantile estimate to slow down convergence"
+    }
+  ]}
+  layout="carousel"
+/>
+
+And to make sure that we have not broken anything, this is what it looks for the median.
+![Example of incremental quantile estimation](/images/incremental_quantile/incremental_quantile_15.png)
+
+A complete function for doing this estimation can be written as:
+
+```python
+def estimate_quantiles(
+        data: np.array, 
+        quantile: float, 
+        m_initial_steps: int = 60, 
+        quantile_sigma: float = 0.025
+    ) -> np.array:
+    '''
+    This function takes an array of observations, 
+    treats them as streaming data and incrementally 
+    estimates the q quantile. The estimate converges
+    over time as the estimate approaches the true
+    quantile.
+
+    :param data: Input data as a numpy array.
+    :param quantile: The desired quantile to estimate.
+    :param m_initial_steps: The desired number of steps until an initial guess.
+    :param quantile_sigma: A parameter specifies the confidence interval.
+    '''
+    # Derived quantities
+    q_tilde = min(quantile, 1-quantile)
+    bias = 1 - 2 * quantile
+    scale_bias = 4*q_tilde*(1-q_tilde)
+    dq = 4*(quantile_sigma/1.96)**2
+    m_initial_steps_adjusted = max(m_initial_steps, (1-(q_tilde))/(q_tilde))
+    posterior_diff_scale = min(quantile_sigma/1.96, q_tilde)
+
+    a = data[0] # Signal min
+    b = data[0] # Signal max
+    quantile_estimates = []
+    quantile_estimate = data[0] # Initialize to the first observation
+
+    total_number_of_observations = 0
+    number_of_negative_side_observations = 0
+    total_number_of_observations_prior = 1/q_tilde
+    number_of_negative_side_observations_prior = quantile*total_number_of_observations_prior
+    excess = 0
+    n = 1 # We have initialized on the first data point
+
+    for y in data[1:]:
+        n += 1
+        a = min(a, y)
+        b = max(b, y)
+        r = b - a
+        diff = quantile_estimate - y
+        sign = diff / abs(diff)
+        nudge = r * (n+1) / (m_initial_steps_adjusted * (n-1))
+    
+        if n <= m_initial_steps_adjusted:
+            quantile_update = nudge * (sign + bias) / scale_bias
+            new_quantile_estimate = quantile_estimate - quantile_update
+            quantile_estimate = min(b, max(a, new_quantile_estimate))
+        else:
+            total_number_of_observations += 1
+            if sign > 0:
+                number_of_negative_side_observations += 1
+            quantile_posterior = (
+                (
+                  number_of_negative_side_observations_prior 
+                  + number_of_negative_side_observations
+                ) / (
+                  number_of_negative_side_observations_prior 
+                  + total_number_of_observations_prior 
+                  + total_number_of_observations
+                )
+            )
+            posterior_diff = (quantile_posterior - quantile)
+            quantile_update = (
+              r 
+              * dq 
+              * (sign + bias) / scale_bias 
+              * abs(posterior_diff) / posterior_diff_scale
+            )
+            if excess and (excess * quantile_update) > 0:
+                excess_sign = excess / abs(excess)
+                excess -= quantile_update
+                if excess_sign != excess / abs(excess):
+                    excess = 0
+                quantile_update = 0
+            new_quantile_estimate = quantile_estimate - quantile_update
+            quantile_estimate = min(b, max(a, new_quantile_estimate))
+            excess += new_quantile_estimate - quantile_estimate
+        quantile_estimates.append(quantile_estimate)
+
+    return quantile_estimates
+```
+
+And here is what it looks like when you fire of an array of them ($q \in (0.1, 0.2, ..., 0.9)$):
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/incremental_quantile/incremental_quantile_16.png",
+      alt: "Quantile estimates for Gaussian noise",
+      caption: "Quantile estimates for Gaussian noise"
+    },
+    {
+      src: "/images/incremental_quantile/incremental_quantile_17.png",
+      alt: "Quantile estimates for Gaussian noise",
+      caption: "Quantile estimates for Gaussian noise"
+    },
+    {
+      src: "/images/incremental_quantile/incremental_quantile_18.png",
+      alt: "Quantile estimates for exponential noise",
+      caption: "Quantile estimates for exponential noise"
+    },
+      {
+      src: "/images/incremental_quantile/incremental_quantile_19.png",
+      alt: "Quantile estimates for exponential noise",
+      caption: "Quantile estimates for exponential noise"
+    },
+    {
+      src: "/images/incremental_quantile/incremental_quantile_20.png",
+      alt: "Quantile estimates for uniform noise",
+      caption: "Quantile estimates for uniform noise"
+    },
+    {
+      src: "/images/incremental_quantile/incremental_quantile_21.png",
+      alt: "Quantile estimates for uniform noise",
+      caption: "Quantile estimates for uniform noise"
+    }
+  ]}
+  layout="carousel"
+/>
+
+But what happens for non-stationary data, say that the distribution shifts?
+In the example below we shift from $x \sim N(0, 1)$ to $x \sim N(2,1)$ after 1000 steps.
+The estimates do follow along but the jaggedness is back.
+This is because our Bayesian estimator is cumulative and it will therefore take a long time before those initial 1000 steps become neglible.
+
+![Shifted distribution](/images/incremental_quantile/incremental_quantile_22.png)
+
+A way to speed things up is to add a "forgetting factor" $\lambda$ to the cumulative $s$ and $t$.
+Because our quantile rate of change is $dq$ we define the forgetting factor $\lambda = (1-c \cdot dq)$.
+This means that the forgetting matches the inertia induced by our desired confidence interval.
+Say that we want to forget 90% within one $\frac{1}{dq}$ observations, 
+solving the expression $0.1 = (1 - c \cdot dq)^\frac{1}{dq} \rightarrow c = \frac{1 - e^{dq \cdot log(0.1)}}{dq}$,
+which for our typical confidence interval means $c \approx 2.3$.
+Putting this back into our forgetting factor simplifies the solution $\lambda = (1- \frac{1 - e^{dq \cdot log(0.1)}}{dq} \cdot dq) = e^{dq \cdot log(0.1)}$.
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/incremental_quantile/incremental_quantile_23.png",
+      alt: "Quantile estimations of shifting distributions",
+      caption: "Quantile estimations of shifting distributions"
+    },
+    {
+      src: "/images/incremental_quantile/incremental_quantile_24.png",
+      alt: "Quantile estimations of shifting distributions",
+      caption: "Quantile estimations of shifting distributions"
+    },
+    {
+      src: "/images/incremental_quantile/incremental_quantile_25.png",
+      alt: "Quantile estimations of shifting distributions",
+      caption: "Quantile estimations of shifting distributions"
+    },
+    {
+      src: "/images/incremental_quantile/incremental_quantile_26.png",
+      alt: "Quantile estimations of shifting distributions",
+      caption: "Quantile estimations of shifting distributions"
+    }
+  ]}
+  layout="carousel"
+/>
+
+That is the gist of it. There are other ways of estimating quantiles but that can be a later post.

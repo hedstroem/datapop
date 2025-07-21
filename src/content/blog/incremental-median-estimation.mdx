@@ -1,5 +1,5 @@
 ---
-title: 'Incremental median'
+title: 'Incremental median estimation'
 description: 'How to estimate the median of steaming data'
 pubDate: 2025-07-15
 tags: ['statistics', 'streaming data']
@@ -38,7 +38,7 @@ The median estimate can just be initialized to the first observation. This leave
 Note that nudge = 0.1 makes the estimate converge quicker than nudge = 0.01, but, the trade-off is that it is also more sensitive to noise. So, what is a good nudge factor?
 
 One way is to approach is heuristically; say that we expect the estimator to approximately reach the median in M steps. 
-Since the median is the 50th quantile; a worst case scenario where we start at the min or max means that we have to step 50 quantiles. 
+Since the median is the 50th percentile; a worst case scenario where we start at the min or max means that we have to step 50 percentage units. 
 This means that we could choose $\frac{max(max - median,\: median - min)}{M}$ as the nudge factor. 
 Since we do not know the median we can use the range $R = max - min$ as an upper bound $\frac{R}{M}$. This is an extreme scenario where the median is close to either the min or max.
 For the uniform scenario where the median lies dead in the middle between min and max it is twice as big, so then we will get to our estimate in $\frac{M}{2}$ steps.
@@ -61,8 +61,8 @@ $$
 
 The intuition behind this is that $n$ samples split the line into $n+1$ sections and ordering them by size gives $1$ and $n$ as the first and final sections.
 Of course, our data is not likely uniformly distributed, but the quantiles are by definition.
-This means that after, for example $n = 9$, we would have expected to seen 10% and 90% quantile with an 80 quantile range.
-By $n = 99$ we will have seen from the 1% to the 99% quantile and subsequently the $n = 999$ sample gives us 0.1% to 99.9% quantile.
+This means that after, for example $n = 9$, we would have expected to seen 10% and 90% percentile with an 80 percentile range.
+By $n = 99$ we will have seen from the 1st to the 99th percentile and subsequently the $n = 999$ sample gives us 0.001 to 0.999 quantile.
 There are two take-aways from this observation.
 
 The first is that we can invert the formula $R = \frac{n-1}{n+1} \rightarrow n = -\frac{R+1}{R-1}$.
@@ -136,8 +136,8 @@ The curve fitting is easy as it is a square root of the fraction and $x = 0.5$ n
 This means that empirically we have arrived at the rubber band random walk standard deviation $\sigma = \frac{1}{\sqrt{8}}\sqrt{\frac{dq}{q_t}} = \sqrt{\frac{dq}{8q_t}}$. 
 Note that this does not depend on $n$, which we conjectured above. 
 Simiarly to what we have done before, we can shuffle expressions around to find the fraction given a target standard deviation $\sigma$ as $\frac{dq}{q_t} = 8\sigma^2$.
-If we were to calibrate a 95% confidence interval ($\pm 1.96\sigma$) over $\pm 0.01$ quantiles ($\rightarrow \sigma = \frac{0.01}{1.96}$) then $\frac{dq}{q_t} \approx 0.00021 \rightarrow dq = 1/9604$ ($q_t = 0.5$).
-For a more liberal $\pm 0.025$ quantiles $\frac{dq}{q_t} \approx 0.0013 \rightarrow dq = 1/1536.64$.
+If we were to calibrate a 95% confidence interval ($\pm 1.96\sigma$) over $\pm 1$ percentiles ($\rightarrow \sigma = \frac{0.01}{1.96}$) then $\frac{dq}{q_t} \approx 0.00021 \rightarrow dq = 1/9604$ ($q_t = 0.5$).
+For a more liberal $\pm 2.5$ percentiles $\frac{dq}{q_t} \approx 0.0013 \rightarrow dq = 1/1536.64$.
 
 <ImageGallery 
   images={[
