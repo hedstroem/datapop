@@ -324,4 +324,31 @@ Putting this back into our forgetting factor simplifies the solution $\lambda = 
   layout="carousel"
 />
 
-That is the gist of it. There are other ways of estimating quantiles but that can be a later post.
+The code additions are as follows.
+```python
+...
+forgetting_factor = np.exp(dq * np.log(0.1))
+...
+for y in data[1:]:
+  ...
+  if n <= m_initial_steps_adjusted:
+    ...
+  else:
+    total_number_of_observations = forgetting_factor*total_number_of_observations
+    number_of_negative_side_observations = forgetting_factor*number_of_negative_side_observations
+    total_number_of_observations += 1
+    if sign > 0:
+      number_of_negative_side_observations += 1
+    ...
+```
+
+One added bonus to this framework is that one can extract the $\delta_q = E(p\:|\:x_1, ..., x_n) - q$ and sum $\sum_{q} \delta_q$ as a measure of distribution deviation.
+This aggregated signal can be used to indicate that the estimator is converging.
+It can also be treated as an indicator for change but there are better ways to do that, plus
+as one can see in the example in the example below, it does not capture widening or narrowing of a distribution.
+
+![Shifted distribution](/images/incremental_quantile/incremental_quantile_27.png)
+
+The topic of change detection warrants its own set of posts.
+It is for example possible to build one on top of a quantile estimator.
+Anything that can be used as a reference for what the distribution used to look like.
