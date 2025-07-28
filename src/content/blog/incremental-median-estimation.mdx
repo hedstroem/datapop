@@ -33,7 +33,7 @@ def update_median_estimate(
 
 The median estimate can just be initialized to the first observation. This leave the nudge factor as a parameter. Here is a graph of the median estimations applied to Gaussian noise with two different nudges:
 
-![Two incremental median estimations](/images/inc_1.png)
+![Two incremental median estimations](/images/incremental_median/inc_1.png)
 
 Note that nudge = 0.1 makes the estimate converge quicker than nudge = 0.01, but, the trade-off is that it is also more sensitive to noise. So, what is a good nudge factor?
 
@@ -43,11 +43,11 @@ This means that we could choose $\frac{max(max - median,\: median - min)}{M}$ as
 Since we do not know the median we can use the range $R = max - min$ as an upper bound $\frac{R}{M}$. This is an extreme scenario where the median is close to either the min or max.
 For the uniform scenario where the median lies dead in the middle between min and max it is twice as big, so then we will get to our estimate in $\frac{M}{2}$ steps.
 
-![Incrementally estimating max and min](/images/inc_2.png)
+![Incrementally estimating max and min](/images/incremental_median/inc_2.png)
 
 With this method we have a bit more control, as can be seen in the following graph:
 
-![Comparison of different R/M nudges](/images/inc_3.png)
+![Comparison of different R/M nudges](/images/incremental_median/inc_3.png)
 
 Eyeballing this particular example gives the M = 30, 16 steps and M = 120, 91 steps to get to the sample median. 
 Now, there additional steps we can take to ensure a fair(er) nudging toward the median and it relates to $R$.
@@ -78,12 +78,12 @@ See two examples below of the difference, one cherry-picked (note that the corre
 <ImageGallery 
   images={[
     {
-      src: "/images/inc_4.png",
+      src: "/images/incremental_median/inc_4.png",
       alt: "Improved convergence example 1",
       caption: "Cherry-picked example"
     },
     {
-      src: "/images/inc_5.png",
+      src: "/images/incremental_median/inc_5.png",
       alt: "Improved convergence example 2",
       caption: "Regular convergence"
     },
@@ -103,12 +103,12 @@ Of course, we would only apply this after $M$ steps, when we have actually expec
 <ImageGallery 
   images={[
     {
-      src: "/images/inc_6.png",
+      src: "/images/incremental_median/inc_6.png",
       alt: "Test of random walk penalty of the nudge amplitude",
       caption: "Example 1: Gaussian"
     },
     {
-      src: "/images/inc_7.png",
+      src: "/images/incremental_median/inc_7.png",
       alt: "Test of random walk penalty of the nudge amplitude on an exponential distribution",
       caption: "Example 2: Exponential"
     },
@@ -127,10 +127,10 @@ The most extreme scenario has $dq = q_t$ when $q_t = 0.5$ as it always reverses 
 Of course, we want to be able to assume any $dq$. 
 To get an intution behind this we simulated using $dq = \frac{1}{50}$ and noted that is approximated a Gaussian distribution.
 In the limit where $dq \rightarrow 0$ it makes sense because then the drift back towards the median is less dominant. 
-![Histogram of quantile estimations](/images/inc_8.png)
+![Histogram of quantile estimations](/images/incremental_median/inc_8.png)
 
 We run more experiments with different fractions of $\frac{dq}{q_t}$, calculate the standard deviation, resulting in:
-![Experiments logging standard deviation of quantile estimations as a function of dq/qt](/images/inc_9.png)
+![Experiments logging standard deviation of quantile estimations as a function of dq/qt](/images/incremental_median/inc_9.png)
 
 The curve fitting is easy as it is a square root of the fraction and $x = 0.5$ neatly intersects $y = 0.25$. 
 This means that empirically we have arrived at the rubber band random walk standard deviation $\sigma = \frac{1}{\sqrt{8}}\sqrt{\frac{dq}{q_t}} = \sqrt{\frac{dq}{8q_t}}$. 
@@ -142,12 +142,12 @@ For a more liberal $\pm 2.5$ percentiles $\frac{dq}{q_t} \approx 0.0013 \rightar
 <ImageGallery 
   images={[
     {
-      src: "/images/inc_10.png",
+      src: "/images/incremental_median/inc_10.png",
       alt: "Example 1 of random walk confidence interval nudges",
       caption: "Example 1"
     },
     {
-      src: "/images/inc_11.png",
+      src: "/images/incremental_median/inc_11.png",
       alt: "Example 2 of random walk confidence interval nudges",
       caption: "Example 2"
     },
