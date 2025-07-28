@@ -1,0 +1,448 @@
+---
+title: 'Focusing on Bayesian validation for alternative incremental quantile estimation'
+description: 'Shaky foundations of an alternative approach to incremental quantiles'
+pubDate: 2025-07-23
+tags: ['statistics', 'streaming data']
+---
+
+import ImageGallery from '../../components/ImageGallery.astro';
+
+While finishing up the last post on incremental quantile estimation got intrigued by the Bayesian estimator.
+It can basically verify any method, so the question is if one can make a simpler (and more robust) approach than the nudger?
+To strengthen my intuition I ran an experiment where one takes the first 10 observations and estimate their quantiles.
+The quantile we measure our error towards is $q = 0.9$.
+
+![...](/images/incremental_quantile_2/incremental_quantile_2_1.png)
+
+Notice that the 0 error line is between the yellow observation 5 (=1.64) and blue observation 0 (=1.01).
+This is also where we find the red sample quantile.
+Now, what to do with this information?
+Either one can start throwing away the lousy estimates for better ones (like, in between the blue and yellow), or one can be smarter about their initial selection.
+
+To address the latter.
+Remember from the previous posts that one expects to see the range $R$ after $n$ observations $R = (n-1)/(n+1)$.
+This also meant that one had to wait until $n = \frac{1-\tilde{q}}{\tilde{q}}$ where $\tilde{q} = min(q, 1-q)$
+to match the expected range of observed quantiles. 
+So for our example $q = 0.9 \rightarrow n = 9$ we basically already did this.
+However, with this reasoning we should pick our first observation as our median estimate and that does not always work out.
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_2.png",
+      alt: "Using the first observation to approximate the median",
+      caption: "Using the first observation to approximate the median"
+    },
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_3.png",
+      alt: "Using the first observation to approximate the median",
+      caption: "Using the first observation to approximate the median"
+    },
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_4.png",
+      alt: "Using the first observation to approximate the median",
+      caption: "Using the first observation to approximate the median"
+    }
+  ]}
+  layout="carousel"
+/>
+
+So there is clearly some value in having more than 1 observation in order to learn something more about the spread of quantiles.
+Probably the more the merrier but we are interested in small solutions, so $n = $ 2, 3, 5 or even 10 would be nice.
+To make our task easier to manage we can start by giving ourselves a calibration window $w$ where we get to pick our $n$ observations.
+
+One thing to keep track of if $w < \frac{1-\tilde{q}}{\tilde{q}}$. 
+In that case we know that our estimate is the maximum or minimum observation times a factor $\delta$ for the potentially missing range $\delta = \frac{R_q}{R_w} = (1-2\tilde{q})\frac{w+1}{w-1}$.
+For the case where we have seen the observed the range we can sort the observations and pick out the quantile estimate from there.
+Of course, that would require us to buffer the observations, in which case we might as well call $n = w$.
+Then we pick the ith indexed observations in a sorted list which matches our quantile (for $q = 0.9$ we pick the 9th out of 10), then we pick $\pm 1$ indices around it and cram out estimates into that range.
+This does not work out that nice as can be seen below:
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_5.png",
+      alt: "Using the first $n$ observations to estimate a quantile range",
+      caption: "Using the first n observations to naively estimate a quantile range"
+    },
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_6.png",
+      alt: "Using the first $n$ observations to estimate a quantile range",
+      caption: "Using the first n observations to naively estimate a quantile range"
+    },
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_7.png",
+      alt: "Using the first $n$ observations to estimate a quantile range",
+      caption: "Using the first n observations to naively estimate a quantile range"
+    }
+  ]}
+  layout="carousel"
+/>
+
+This is a good example where trying to be clever can be severly punishing, as in example 2.
+If we put that idea on pause and instead consider another dimension of our estimate, *how long does it take until we can trust it?*
+For both the median and $q = 0.9$ it seems to take at least 100 observations before the Bayesian estimate stabilizes.
+This is also a limitation to be way of because it means that we can not shuffle our observations around and reseting the Bayesian estimates too often.
+
+Another fact that to note is the **correlation** between the quantile estimation errors. 
+This is because they are estimated using the same random sequence of observations.
+For two observations $y_1, y_2$ that are close to each other $\Delta y = |y_2-y_1| << 1$ this means that differentiating between the two would require an observation that lies between them.
+This means that one probably want to randomly drop observations to avoid correlation in the estimates and that one wants to estimate relatively distinct observations.
+
+For a dropout probability of 50%:
+
+![...](/images/incremental_quantile_2/incremental_quantile_2_8.png)
+
+So, back to the algorithm crafting. 
+If we start with the first $M$ observations that we did before (better not try to be clever).
+The next step is after $W$ observations to reset the observations based on what we have learned.
+If we take a look at the quantile estimation errors vs the observation values at $n = 100$ we have the following scatter plot.
+
+![...](/images/incremental_quantile_2/incremental_quantile_2_9.png)
+
+For this example we do not even have an observation on either side of the 0.
+This means that the method we use need to extrapolate.
+A linear regression will do a decent job for this example.
+However, even this demo distribution (Gaussian) is not linear as it is only linear-ish.
+Therefore multiple shooting is required to narrow down the interval of shooting.
+
+One important choice will be the how to take the linear regression $y = kx + m$ and use that information.
+The most likely position of the quantile is the intercept $m$ but only one estimate can have that position.
+We also know that we do not want to agressively cluster the estimates either.
+A fair initial assumption is to assume some $\pm \Delta q$ interval, like $\pm 0.1$ quantiles or $\pm 0.05$ quantiles.
+This means that for $W = 100$, $M = 10$, $\Delta q = 0.1$ every 100 observations we will reset the estimates to $(-0.1, -0.0\bar{7}, -0.0\bar{5}, ..., 0.1)$ quantile errors according to a linear fit of error and observations.
+The result for a few different $\Delta q$ can be seen below.
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_10.png",
+      alt: "Using the first $n$ observations to estimate a quantile range",
+      caption: "Interval +/-0.1"
+    },
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_11.png",
+      alt: "Using the first $n$ observations to estimate a quantile range",
+      caption: "Interval +/-0.05"
+    },
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_12.png",
+      alt: "Using the first $n$ observations to estimate a quantile range",
+      caption: "Interval +/-0.01"
+    }
+  ]}
+  layout="carousel"
+/>
+
+Note that only $\pm 0.1$ quantiles does not collapse to a single value unlike $\pm 0.05$ and $\pm 0.01$ quantiles.
+Another observation is that $\Delta q = 0.1$ collapses to a single value for the median, so that property is dependent on $q$.
+
+![...](/images/incremental_quantile_2/incremental_quantile_2_13.png)
+
+Here is what its corresponding linear fit looks like. 
+It basically collapses into a ball where quantiles and estimates no longer correlate.
+This is a symptom of what we disussed before, longer periods are needed to differentiate between the points.
+It is also information if we do not get a positive slope, because by definition it should always be positive.
+
+![...](/images/incremental_quantile_2/incremental_quantile_2_14.png)
+
+By doubling the $W$ we give the observations more time to converge, avoiding collapse for the median.
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_15.png",
+      alt: "...",
+      caption: "Doubling the reset interval W after every reset."
+    },
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_16.png",
+      alt: "...",
+      caption: "It corresponding linear fit at 1000 observations"
+    }
+  ]}
+  layout="carousel"
+/>
+
+After experimenting with $\Delta q$ I thought of an even simpler way of using the result of the linear model.
+If all we care about is the intercept $m$, then lets just make our new batch of estimates $y_{i,new} = (1-\gamma) y_{i,old} + \gamma m$ where $y_i$ is the $i$th observation.
+This keeps the behavior of the median the same and also makes $q = 0.9$ more sensible. See the difference below for the same data.
+In this example $\gamma = 0.5$, which seems to be a good compromise between converge and keeping the spread of estimates.
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_17.png",
+      alt: "...",
+      caption: "Linear model"
+    },
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_18.png",
+      alt: "...",
+      caption: "Smoothing model"
+    }
+  ]}
+  layout="carousel"
+/>
+
+Of course, this method runs the risk of getting stuck below or over the estimate. 
+This tends to happen if all the $M$ initializing observations are on one side of the quantile $q$ we are trying to estimate. 
+If our estimations are biased (one-sided), we should correct for it as $y_{i,new} = (1-\gamma) y_{i,old} + \gamma m - \gamma bias$,
+where the $bias = \frac{1}{M}\sum_{i=1}^{M} (q - y_i)$ and $y_i$ are estimates. See the difference below.
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_19.png",
+      alt: "...",
+      caption: "Without bias"
+    },
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_20.png",
+      alt: "...",
+      caption: "With bias"
+    }
+  ]}
+  layout="carousel"
+/>
+
+Now the final step is to actually put a number of what we think the quantile is.
+There are a few simple options like the intercept $m$ that is used to update the estimates.
+Another option is to take the estimate with the lowest quantile estimation error.
+Yet another option is to do the linear regression after every observation and mix it with the intercept as $m = (1 - \frac{c_W}{W}) m_{reset} + \frac{c_W}{W} m_{online}$, 
+where $c_W$ is the counter towards the reset window $W, m_{reset}$ is the intercept that determines the estimates and $m_{online}$ is always calculated.
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_21.png",
+      alt: "...",
+      caption: "q = 0.9 intercept as quantile estimate"
+    },
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_22.png",
+      alt: "...",
+      caption: "q = 0.5 intercept as quantile estimate"
+    },
+      {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_23.png",
+      alt: "...",
+      caption: "q = 0.99 intercept as quantile estimate"
+    },
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_24.png",
+      alt: "...",
+      caption: "q = 0.9 lowest quantile estimation error estimate as quantile estimate"
+    },
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_25.png",
+      alt: "...",
+      caption: "q = 0.5 lowest quantile estimation error estimate as quantile estimate"
+    },
+      {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_26.png",
+      alt: "...",
+      caption: "q = 0.99 lowest quantile estimation error estimate as quantile estimate"
+    },
+      {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_27.png",
+      alt: "...",
+      caption: "q = 0.9 lowest mix method as quantile estimate"
+    },
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_28.png",
+      alt: "...",
+      caption: "q = 0.5 lowest mix method as quantile estimate"
+    },
+      {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_29.png",
+      alt: "...",
+      caption: "q = 0.99 lowest mix method as quantile estimate"
+    }
+  ]}
+  layout="carousel"
+/>
+
+Out of the three the mix method provides a seemingly stable output.
+Note that all methods have troubles converging when $q \geq 0.9$.
+This is due to the design of our algorithm.
+We are not making sure to include our maximum and minimum in our estimation ranges. Instead we are relying on our initial $M$.
+We are also using pretty aggressive reset windows, we would not expect to see a $q = 0.999$ observation within $W = 100, 200, ...$.
+It is also possible to play around with the bias correction and convert it to PI-regulator, meaning that we accumulate biases over time.
+Another way would also be to amplify the bias factor when $q$ is close to 0 or 1, effectively adding a P-factor. 
+
+A few combined steps include:
+* Track the min $a$ and max $b$.
+* Make sure the slope $k \geq 0$.
+* Scale the bias by $k$ as $y_{i,new} = (1-\gamma) y_{i,old} + \gamma (m -  \cdot k \cdot bias)$.
+* Calculate the $\Delta y_{overstep} = max(0, max_i(y_{i,new}) - b)$ and $\Delta y_{understep} = min(0, min_i(y_{i,new}) - a)$.
+* Adjust the estimates by any overstep or understep $y_{i,adj} = y_{i,new} - \Delta y_{overstep} - \Delta y_{understep}$.
+
+This is basically a sanity check (are we outside of bounds) and using the slope which should be the correct P-factor.
+It is not a perfect solve as can be observed by the third example in the graphs below.
+The weirdness seems to appear if we are unfortunate enough to put all of our estimates above the true quantile.
+This can potentially be mitigated but similarly to the previous posts, lets reserve extreme quantiles for later.
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_30.png",
+      alt: "...",
+      caption: "q = 0.99 with proposed k * bias and over/understep correction"
+    },
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_31.png",
+      alt: "...",
+      caption: "q = 0.99 with proposed k * bias and over/understep correction"
+    },
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_32.png",
+      alt: "...",
+      caption: "q = 0.99 with proposed k * bias and over/understep correction"
+    }
+  ]}
+  layout="carousel"
+/>
+
+Let's write down the algorithm so far:
+
+```python
+def linear_regression(x, y):
+    n = len(x)
+    xm = sum(x) / n
+    ym = sum(y) / n
+    variance = sum((x - xm)**2)
+    covariance = sum((x - xm)*(y - ym))
+    slope = covariance / variance
+    intercept = ym - slope * xm
+    return slope, intercept
+
+def estimate_quantiles(
+        data: np.array, 
+        quantile: float,
+        number_of_estimators: int = 10,
+        dropout_probability: float = 0.5,
+        reset_window: int = 100,
+        reset_window_scaling: float = 2,
+        update_factor: float = 0.5
+    ) -> np.array:
+    '''
+    This function takes an array of observations, 
+    treats them as streaming data and incrementally 
+    estimates the q quantile. The estimate converges
+    over time as the estimate approaches the true
+    quantile.
+
+    :param data: Input data as a numpy array.
+    :param quantile: The desired quantile to estimate.
+    :param m_initial_steps: The desired number of steps until an initial guess.
+    :param quantile_sigma: A parameter specifies the confidence interval.
+    '''
+
+    q_tilde = min(quantile, 1-quantile)
+    a = min(data[:number_of_estimators]) # Signal min
+    b = max(data[:number_of_estimators]) # Signal max
+    estimates = data[:number_of_estimators]
+
+    n = np.zeros(number_of_estimators)
+    s = np.zeros(number_of_estimators)
+    alpha = quantile * 1/q_tilde * np.ones(number_of_estimators)
+    beta = (1-quantile) * 1/q_tilde * np.ones(number_of_estimators)
+
+    quantile_estimates = []
+    quantile_estimate = 0
+    counter = 0
+    reset_window_scale = 1
+    reset_intercept = 0
+    reset_slope = 0
+
+    for y in data[number_of_estimators:]:
+        a = min(a, y)
+        b = max(b, y)
+        dropout = 1*(np.random.rand(number_of_estimators) < dropout_probability)
+        n += dropout*1
+        s += dropout*1*((estimates - y) >= 0)
+        quantile_posterior_expected_value = (alpha + s)  / (alpha + beta + n)
+        posterior_expected_value_diff = (quantile_posterior_expected_value - quantile)
+
+        slope, intercept = linear_regression(posterior_expected_value_diff, estimates)
+        slope = max(0, slope)
+        bias = sum(posterior_expected_value_diff)/number_of_estimators
+
+        if counter >= reset_window_scale * reset_window:
+            reset_intercept = intercept
+            reset_slope = slope
+            estimates = (
+              (1 - update_factor) * estimates 
+              + update_factor * reset_intercept 
+              - update_factor * bias * reset_slope
+            )
+            overstep = max(0, max(estimates) - b)
+            understep = min(0, min(estimates) - a)
+            estimates = estimates - overstep - understep
+            n = np.zeros(number_of_estimators)
+            s = np.zeros(number_of_estimators)
+            reset_window_scale = reset_window_scaling*reset_window_scale
+            counter = 0
+
+        if reset_window_scaling == 1:
+            quantile_estimate = intercept
+        else:
+            reset_alpha = counter/(reset_window*reset_window_scale)
+            quantile_estimate = (1-reset_alpha) * reset_intercept + reset_alpha * intercept
+
+        counter += 1
+        quantile_estimates.append(quantile_estimate)
+      
+    return quantile_estimates
+```
+
+Here are a few examples of running it for multiple quantiles:
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_33.png",
+      alt: "...",
+      caption: "Quantile estimates for Gaussian noise"
+    },
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_34.png",
+      alt: "...",
+      caption: "Quantile estimates for Gaussian noise"
+    },
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_35.png",
+      alt: "...",
+      caption: "Quantile estimates for exponential noise"
+    },
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_36.png",
+      alt: "...",
+      caption: "Quantile estimates for exponential noise"
+    },
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_37.png",
+      alt: "...",
+      caption: "Quantile estimates for uniform noise"
+    },
+    {
+      src: "/images/incremental_quantile_2/incremental_quantile_2_38.png",
+      alt: "...",
+      caption: "Quantile estimates for uniform noise"
+    }
+  ]}
+  layout="carousel"
+/>
+
+Now, if one designing this algorithm for monitoring a distribution like this then one might can probably share estimators.
+That can be the topic of another post together with other methods for estimating distributions.
+One question we looked into in the previous post about incremental quantile estimation was how the estimator behaves when the distribution shifts.
+The short answer is that it can not follow it. 
+The estimator breaks and even if we add in a forgetting factor we have the problem that this approach does not fare well when the observations are one sided.
+This is what happens when our distribution shifts far, like in the second shift in the example below. 
+All estimates are far beyond the new maximum and thus the linear fit will be uninformative.
+
+![...](/images/incremental_quantile_2/incremental_quantile_2_39.png)
+
+I will continue to meditate on this approach and how it could be robustified.
