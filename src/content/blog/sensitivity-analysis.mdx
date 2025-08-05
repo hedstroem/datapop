@@ -147,4 +147,33 @@ The second (messy) observation is related to [this nice post on SHAP titled "Be 
 It essentially states that SHAP values to not infer causality and they show this with a nice subscriber retention example.
 In their example there are both measured and unmeasured confounding features, both causing skewed insights regarding discounts and ad spend.
 
-This has inspired me to dive into causal modeling in my next post.
+To verify that the neural net suffers from the same issues we recreate the dataset, train a classifier neural net and calculate its gradients.
+Because care about the directionality of our gradients we average instead of looking at the power. 
+This gives us the aggregated sensivity in the bar chart below:
+
+![...](/images/sensitivity/sens_9.png)
+
+Indeed, it suffers from the same problem as highlighted by their example.
+So... feature importance and sensitivity analys can be bogus if the causality is whack.
+What can be done about this?
+The article talks about the double-ML approach for observed cofounders, which is the case for ad spend.
+The steps are:
+1. Train a model to predict ad spend using possible confounders.
+2. Train a model to predict the target (did renew) using the same set of possible confounders.
+3. Train a model to predict the residual of 2. using the residual from 1.
+
+Using this methodology one finds that there is no additional information in ad spend after what has been predicted from the confounders.
+The article also mentions redudancy which is a problem of sales calls as a subset of interactions.
+This means that the model thinks that sales calls are redudant for the modeling but the simplest way to test this is to simply fit a univariate model.
+For unobserved confounders however, like product need which influences discount, we are out of luck.
+The article talks about experimental design to identify the true causal nature.
+
+All of this has inspired me to dive into causal modeling in my next post.
+
+Another thing to also reflect upon; now we have only looked inwards at the models but another approach is simulation.
+This is what sensivitity-analysis-through-probing frameworks do. It is often referred to what-if simulations,
+which can act as basis of decision for policy or in a control loop.
+
+However, with what we have learned about models missing causality or lacking confidence 
+one understands that it is never as simple as "train a model and start using it".
+A lot of effort can be put towards understanding a problem, models of it and the failure modes of those models.
