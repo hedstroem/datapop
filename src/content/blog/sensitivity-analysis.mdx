@@ -1,0 +1,150 @@
+---
+title: 'Sensitivity analysis & feature importance using gradients'
+description: 'Understanding SHAP and when to use it'
+pubDate: 2025-08-03
+tags: ['machine-learning']
+---
+
+import ImageGallery from '../../components/ImageGallery.astro';
+
+In the post on nonlinear linear regression we mentioned the topic of sensitivity analysis.
+This made me want to try a method that I have been thinking about but never tried.
+Instead of using SHAP (more on that later) or black-box probers, why not use forward differentiation?
+Of course, this is maily handy for models implemented in an automatic differentiation framework like Pytorch.
+
+Writers update: 
+<br>*Turns out that SHAP has a gradient-based explainer, we will compare and reason about it* :)</br>
+
+If we implemented a simple, dense univarate neural network in Pytorch like this:
+
+```python
+from torch import nn
+
+class univariate_dense_net(nn.Module):
+    def __init__(
+            self, 
+            n_input, 
+            n_hidden = [16, 16], 
+            activation_function = nn.Tanh()
+        ):
+        super().__init__()
+        self.nodes_per_layer = [n_input] + n_hidden + [1]
+        self.layers = nn.ParameterList()
+        depth = len(n_hidden)
+        for i in range(depth+1):
+            self.layers.append(nn.Linear(self.nodes_per_layer[i], self.nodes_per_layer[i+1]))
+            if i < depth:
+                self.layers.append(activation_function)
+        self.double()
+        
+    def forward(self, x):
+        y = x
+        for layer in self.layers:
+            y = layer(y)
+        return y
+```
+
+And throw a problem at it like this
+ $x_{1,2,3,4,5,6,7} \sim N(0,1)$ and $y = \frac{5}{1 + e^{-2x_1}} + 3e^{-x_2^2} + x_3x_4$.
+
+![...](/images/sensitivity/sens_1.png)
+
+Given that we store our $x_i$ in a matrix $X$ and targets in a column vector $y$. 
+Then one can calculate the gradient of the model output by $\pm 1$ unit with regards to $x_i$ using`torch.autograd.grad`for Pytorch.
+One note is that one needs to copy the input data and make it require a gradient for this calculation to work.
+
+```python
+import torch
+X_grad = X.clone().requires_grad_()
+grad = torch.autograd.grad(
+    model.forward(X_grad), 
+    X_grad, 
+    torch.ones_like(y)
+)
+```
+
+With this we have received an $n \times m$ matrix where each element is $\frac{\partial{y}}{\partial{x_i}}(k)$,
+where $k$ is our row index.
+Using this derivative of the model at every observation, we can look at things like the average power per feature.
+This hints at which of the signals the model things are strong contender for nudging the target.
+
+![...](/images/sensitivity/sens_2.png)
+
+It is a simple feature importance but it has done the trick.
+Note that there was a cross-effect between $x_3x_4$, 
+the question is if that can be found when analyzing the gradients.
+By doing principal component analysis (PCA) on the gradients we find four components.
+The rest PC5, PC6, PC7 just capture noise.
+
+![...](/images/sensitivity/sens_3.png)
+
+And by looking at the weights of the components we find that PC1 belongs to $x2$, PC4 belongs to $x_1$ but PC2 and PC3 references both $x_3$ and $x_4$.
+The first time (PC2) they both have positive weight and the second time (PC3) they positive-negative weights. 
+Perhaps this hints at the underlying relationship.
+Maybe it does not specifically.
+
+![...](/images/sensitivity/sens_4.png)
+
+Here are the corresponding SHAP values using the official library:
+```python
+import shap
+shap_values = shap.GradientExplainer(model, data).shap_values(eval_data)
+```
+
+![...](/images/sensitivity/sens_5.png)
+
+Note that the SHAP values seems to think that $x_1$ is more important than $x_2$, 
+when the size of the gradients say the opposite.
+The SHAP values are indeed correct when it comes to feature importance.
+The MSE increases to 70 when $x_1$ is blocked out while it only increases to 30 for $x_2$.
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/sensitivity/sens_6.png",
+      alt: "...",
+      caption: "x1 excluded from training"
+    },
+    {
+      src: "/images/sensitivity/sens_7.png",
+      alt: "...",
+      caption: "x2 excluded from training"
+    },
+  ]}
+  layout="carousel"
+/>
+
+So feature importance != sensitivity.
+The gradients tell us something about how to probe the model to change the output.
+In this case prodding $x_2$ has a better marginal effect than $x_1$.
+However, it does not (yet) tell us how removing this parameter would hurt the model.
+For $x_5, x_6, x_7$ we have learned that lack of sensitivity can be interpreted as feature uninportance.
+
+To my understanding the SHAP gradient explainer starts by sampling a subset of the data, called the baseline observations $x'$.
+To calculate the SHAP value $\phi_i$ for feature $i$ of observation $x_i[k]$ 
+one calculates the path integral of the gradient from $x_i[k]$ to each baseline $x_i'$
+and then averages over the baselines.
+The points along the path are parametrized using $\alpha$ as $x_{\alpha}'[k] = x' - \alpha (x[k] - x')$
+$$$
+\phi_i[k] = (x_i[k] - x'_i)\int_{\alpha = 0}^{1} \frac{\partial f(x_{\alpha}'[k])}{\partial x_i} d\alpha.
+$$$
+
+To make life easy for our implementation we can approximate the integral $\int_0^1 f(x) dx \approx \sum_{i=0}^h \frac{1}{h}f(x+\frac{i}{h})$.
+This gives us our own homebrew SHAP values.
+Of course, it is not identical to the real SHAP library. They probably have a much nicer implementation.
+
+![...](/images/sensitivity/sens_8.png)
+
+So how does this work? Well, basically we are interested in feature importance.
+The simplest way to answer that question would be just run leave-one-out and document where model performance tanks.
+For the SHAP values to become large, signaling feature importance, two things must happen:
+1. The path must have some variation in the feature $i$, otherwise $x_i[k] - x'_i = 0$.
+2. The gradient should be consistently positive or negative so that the magnitude of the integral grows.
+The means that not only must the gradient be stable for changes in feature $i$ but also other features along the path.
+This might also explain why we see $x_3$ and $x_4$ cluster closer to zero as their effect is dependent.
+
+The second (messy) observation is related to [this nice post on SHAP titled "Be careful when intrepreting predictive models in search of causal insights.](https://shap.readthedocs.io/en/latest/example_notebooks/overviews/Be%20careful%20when%20interpreting%20predictive%20models%20in%20search%20of%20causal%20insights.html)
+It essentially states that SHAP values to not infer causality and they show this with a nice subscriber retention example.
+In their example there are both measured and unmeasured confounding features, both causing skewed insights regarding discounts and ad spend.
+
+This has inspired me to dive into causal modeling in my next post.

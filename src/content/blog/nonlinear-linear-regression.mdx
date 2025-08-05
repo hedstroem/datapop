@@ -1,0 +1,166 @@
+---
+title: 'Nonlinear linear regression'
+description: 'Extending whitebox modeling'
+pubDate: 2025-07-31
+tags: ['machine-learning']
+---
+
+import ImageGallery from '../../components/ImageGallery.astro';
+
+Consider linear regression $y(\textbf{x}) = \sum_{i = 0}^{m} (w_i x_i) + b$ 
+where $y \in \rm I\!R$ is the output, 
+$\textbf{x} \in \rm I\!R^m$ the input with $m$ features,
+$w_i$ is the weight corresponding to the $i$th feature and $b$ is the intercept.
+The neat thing about this model is that it has a closed form maximum likelihood solution.
+
+There is also the extention to the generalized linear model where $E(y|\textbf{x}) = \mu = g^{-1}(\textbf{x}\beta)$,
+the way to read this is that $y$ is sampled from some distribution $y \sim Y$ (does not have to be Gaussian) and it's
+expected value $\mu$ depends on some link function $g$ of a linear combinations of the inputs $\textbf{x}\beta$.
+These types of models generally don't have closed forms and require iterative maximum likelihood or monte carlo methods.
+
+But where we are going we need yet another extension to generalized additive models where $g(E(y|\textbf{x})) = \sum_{i = 0}^{m} f_i(x_i) + b$.
+Now instead of using linear weights we allow for any smooth transformation $f_i$ of the input signals $x_i$.
+If one has $g$ as the identity function then this is simply called additative models $y = \sum_{i = 0}^{m} f_i(x_i) + b$.
+
+A few years ago I implemented additative models myself, only to discover that someone already proposed it in 1981.
+That's machine learning for you. While researching this topic I also found this [article of comparative setups of
+linear models, generalized linear models, additative models and generalized additative models](https://www.cs.cornell.edu/~yinlou/papers/lou-kdd12.pdf).
+Basically, these models will never beat your average black box model (the article compares to Random Forests TM).
+But they do offer some unique interpretability.
+
+My implementation was in Pytorch and used 1 layer multilayer perceptrons instead of splines or trees.
+The model fitting was not done using backfitting but rather gradient descent.
+
+```python
+def create_weights(n_in, n_out):
+    scale = ((6 / (n_in + n_out))**0.5)
+    return scale*2*(torch.rand(n_in, n_out)-0.5)
+
+class univariate_nllr_model(nn.Module):
+    def __init__(
+            self, 
+            n_input, 
+            n_hidden = 10, 
+            activation_function = nn.Tanh(),
+            loss_function = nn.MSELoss()
+        ):
+        super().__init__()
+        self.hidden_nodes_weights = nn.Parameter(create_weights(n_input, n_hidden))
+        self.hidden_nodes_bias = nn.Parameter(create_weights(n_input, n_hidden))
+        self.aggregration_weights = nn.Parameter(create_weights(n_input, n_hidden))
+        self.linear = nn.Linear(n_input, 1)
+        self.activation_function = activation_function
+        self.loss_function = loss_function
+        self.double()
+        
+    def f(self, x):
+        hidden = self.activation_function(
+            x.unsqueeze(2) * self.hidden_nodes_weights + self.hidden_nodes_bias
+        )
+        return (hidden * self.aggregration_weights).sum(-1)
+
+    def forward(self, x):
+        return self.linear(self.f(x)).squeeze(1)
+    
+    def evaluate(self, x, y, l2_last_layer = 1e-3):
+        fx = self.f(x)
+        yp = self.linear(fx).squeeze(1)
+        loss = self.loss_function(y, yp)
+        if l2_last_layer:
+            loss += l2_last_layer * ((self.linear.weight**2).sum() + (self.linear.bias**2).sum())
+        return loss
+```
+
+For a toy problem where $x_{1,2,3,4,5} \sim N(0,1)$ and $y = \frac{5}{1 + e^{-2x_1}} + 3e^{-x_2^2}$ one gets the following $w_i f_i(x_i)$:
+![...](/images/nonlinear_linear_regression/nllr_1.png)
+
+Of course these are nice smooth functions that fits the tanh activation function well. 
+
+This is what ReLU looks like ($n_{hidden} = 10$):
+![...](/images/nonlinear_linear_regression/nllr_2.png)
+
+Regardless, playing around with the MLP parameters (layer size, depth, activation functions, regularization) will determine the ability of the $f_i(x_i)$ transformation.
+One can also regularize $f_i(x_i)$ to make sure that uninteresting features (2, 3, 4 in this example) becomes close to zero.
+
+If we take a real dataset, like the concrete compressive strength dataset [available here](https://archive.ics.uci.edu/dataset/165/concrete+compressive+strength).
+The goal is to predict the strength as measured in MPa using different blends of concrete. 
+Using 32 hidden neurons in 1 layer to learn the nonlinearities yields for different activation functions:
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/nonlinear_linear_regression/nllr_3.png",
+      alt: "...",
+      caption: "Tanh activation function, training MSE"
+    },
+    {
+      src: "/images/nonlinear_linear_regression/nllr_4.png",
+      alt: "...",
+      caption: "Tanh activation function, learned nonlinearities"
+    },
+    {
+      src: "/images/nonlinear_linear_regression/nllr_5.png",
+      alt: "...",
+      caption: "ReLU activation function, training MSE"
+    },
+    {
+      src: "/images/nonlinear_linear_regression/nllr_6.png",
+      alt: "...",
+      caption: "ReLU activation function, learned nonlinearities"
+    },
+    {
+      src: "/images/nonlinear_linear_regression/nllr_7.png",
+      alt: "...",
+      caption: "Sin activation function, training MSE"
+    },
+    {
+      src: "/images/nonlinear_linear_regression/nllr_8.png",
+      alt: "...",
+      caption: "Sin activation function, learned nonlinearities"
+    },
+    {
+      src: "/images/nonlinear_linear_regression/nllr_9.png",
+      alt: "...",
+      caption: "Binary step activation function, training MSE"
+    },
+    {
+      src: "/images/nonlinear_linear_regression/nllr_10.png",
+      alt: "...",
+      caption: "Binary step activation function, learned nonlinearities"
+    },
+  ]}
+  layout="carousel"
+/>
+
+First of all, one would typically not use sine or binary step as activation functions in neural nets.
+They do yield some interesting observations. The sine seems to overfit and come up with some interleaving effects. 
+The binary finds almost nothing but two effects.
+
+| Activation | MSE | No effect fields | Comment |
+| -------- | ------- |  ------- | ------- |
+| tanh | 53.3 | Coarse aggregate, fine aggregate, water, fly ash | Increasing cement generally makes it stronger. Superplasticizer and age both have a tapering effect. Slag has a minor effect. |
+| ReLU | 48.6 | - | Same cement, age and slag observations from tanh. Excessive water has a negative effect. Superplasticizer appears to even have a negative effect after its initial usefulness. |
+| sin | 31.2 | - | Age, superplasticizer and water behave the same as ReLU. Cement is a shared observation but aggregates are slight down in excessive amounts. Slag also seems to have no effect on the whole.|
+| Binary step | 159.2 | All except age and superplasticizer | When we remove nuanced expressions from the model and study on-off effects one only captures effects from superplasticizer and age. |
+
+The linear(ish) observations seem to be:
+* Higher cement content means a stronger concrete.
+* Avoid excessive superplasticizer and water.
+* 30 to 90 days to cure.
+
+Surely there are cross-effects and trade-offs that one does when balancing a recipe for concrete.
+For example more cement does require more water and superplasticizer is make the concrete workable for higher cement content in the absence of water.
+This type of model does not answer that unless we add those factors explicitly.
+But if where are truly interested in learning more about concrete then there are better models.
+
+Coming back to the topic of nonlinear linear models.
+The downside of my approach is that there are no confidence bounds...
+That said, as I was writing this, then I looked closer at the article from before and found that they do theirs using bootstrapping.
+So then it does not really count.
+
+However, when working with generalized linear models one can work with proper distributions in a Bayesian fashion.
+We do lose that feature nonlinearity but itstead we gain how the linear coefficients distribute.
+
+Of course, another way to approach these problem is to take a truly black-box model such as a neural network or boosted trees,
+and try to figure out which patterns in the data it reacts to.
+That is where one would turn to sensitivity analysis.
