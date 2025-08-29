@@ -1,6 +1,829 @@
 ---
-title: 'Causal modeling'
-description: '...'
-pubDate: 2025-08-05
-tags: ['machine-learning']
+title: 'Learning about causal modeling'
+description: 'Notes on my random walk of causal modeling and the PyWhy ecosystem'
+pubDate: 2025-08-29
+tags: ['notetaking']
 ---
+
+The only thing I knew about causal modeling before I wrote this post is the double ML check. 
+It is the method for checking observed confounders.
+I have had to use it in my work because a manager approached us with the question "Does net promoter score (eNPS) correlate with accident statistics?"
+
+For those of you who do not know, net promoter score is a question "Would you recommend this company to an acquaintance?" on a scale of 1-10.
+If you pick 6 or below you are a detractor, if you pick 9 or 10 then you are a promoter, 7 and 8s do not count.
+The score is calculated as $eNPS = \%promoters - \%detractors$.
+
+eNPS is a touchy subject that managers are usually encouraged to increase, often without clear methods or expected results.
+Therefore, the question itself becomes quite convoluted when you think about what this manager is asking for,
+"Is this looking to strengthen the eNPS-higher-equals-better narrative?" or is it simply that understanding accident statistics is important,
+but then why focus on such a metric?
+
+Regardless, because of the nature of the question we went beyond just quantifying the correlation. 
+It exists, it is like 0.1 or 0.2.
+But the question is of course if that is the cause or if there are confounders.
+And actually... logically the opposite would be a more logical formulation: "more accident-prone workplace $\rightarrow$ less likely to recommend".
+
+The simplest confounding model is:
+![...](/images/causal/causal_1.png)
+
+Where we can label $C$ as our effect (increased frequency in workplace accidents). 
+$B$ is the eNPS and $A$ are potential confounders.
+As someone who had already studied eNPS from before I knew that you get pretty good $R^2$ of eNPS
+using the employee survey average (also called engagement) and more specifically to questions like
+"I know, understand and relate to our company-level strategy". 
+That question alone can explain like 90% of the variance and is also *highly correlated* with how many managers are between you and the CEO.
+
+In a nutshell, to estimate the isolated effect of $B \rightarrow C$ we first need to account for $A \rightarrow B$.
+We do this by training a model $f(A) \rightarrow B'$ and then we calculate the residual $r_B = B - B'$. 
+If we then fit another model $g(A) \rightarrow C'$ and then we calculate the residual $r_C = C - C'$.
+Now we have removed all we know from $A$ from both $B$ and $C$. 
+The final step is then to see if $B$ have any effect on $C$ by training a final model $h(r_B) \rightarrow r_C$.
+If the model $h$ has no explainatory power then it points to $A$ carrying all the information.
+
+One can do this and say that $B \not\rightarrow C$.
+
+# A random walk along the PyWhy libraries
+
+Resources: https://www.pywhy.org/
+
+## EconML - Basics
+
+Resources: https://www.pywhy.org/EconML/spec/causal_intro.html 
+
+EconML is the PyWhy library for *automated learning and intelligence for causation and economics.*
+
+This resource was a great start for me. 
+I like the contrast between forecasting (like, predicting how many sales a video game will have next month)
+and causal modeling (like, understanding how many people will buy the game if we show an ad).
+Much like Bayesian modeling; causal modeling requires you to write down and encode modeling assumptions.
+The basic terminology is outcome (Y), treatment (T) and confounders (W). Confounders can be observed or unobserved.
+
+The main thing that we are after is the conditional average treatment effect or CATE.
+
+### Method 1 - Randomized experiments
+The gold standard for doing causal modeling is randomized experiments.
+In the video game example they explain that gamers are more likely to get targeted by ads and more likely to buy games in the first place.
+By randomly assigning ads, or in this experiment withholding ads, from gamers one can study the outcome. 
+Note that this might not always be practical or possible to achieve hence why the field of research into causal models exists.
+
+### Method 2 - Measure confounders
+
+This links to their page for *estimation methods under unconfoundness*: https://www.pywhy.org/EconML/spec/estimation.html
+
+When perfectly randomized experiments can not be performed then one can use this suite to estimate hetrogeneous treatment effects.
+The theoretical guarantees only hold when all confounders are observed.
+The suite contains four chapters:
+* **Orthogonal / Double machine learning (DML)**
+<br>This is the methodology we described in the beginning of this post.
+For this package the classes are `DML, LinearDML, SparseLinearDML, KernelDML, NonParamDML, CausalForestDML`.
+The difference between these methods are how they create the residual models $h$. 
+DML is generic while Linear, Sparse, Kernel use specific implementations.
+NonParamDML is technically a meta learner (later section) and CausalForestDML is a forest based estimator (also later section).
+Some example code:</br>
+```python
+from econml.dml import DML, SparseLinearDML, NonParamDML
+from sklearn.linear_model import LassoCV
+from sklearn.ensemble import GradientBoostingRegressor
+
+est = DML(model_y=GradientBoostingRegressor(),
+          model_t=GradientBoostingRegressor(),
+          model_final=LassoCV(fit_intercept=False))
+
+est = SparseLinearDML()
+est.fit(y, T, X=X, W=W)
+point = est.effect(X, T0=T0, T1=T1)
+lb, ub = est.effect_interval(X, T0=T0, T1=T1, alpha=0.05)
+
+est = NonParamDML(model_y=GradientBoostingRegressor(),
+                  model_t=GradientBoostingRegressor(),
+                  model_final=GradientBoostingRegressor())
+est.fit(y, t, X=X, W=W)
+```
+* **Doubly robust learning**
+<br>What if we are interested in creating a fully contextualized model instead of just understanding treatments?
+That is where doubly robust learning comes in. 
+Similarly to DML it estimates hetreogenous treatment effects but then also predicts the outcome using data $X$.
+For this package the classes are `DRLearner, LinearDRLearner, SparseLinearDRLearner, ForestDRLearner`.</br>
+```python
+from econml.dr import DRLearner, LinearDRLearner
+from sklearn.ensemble import GradientBoostingRegressor, GradientBoostingClassifier
+
+est = DRLearner(model_regression=GradientBoostingRegressor(),
+                model_propensity=GradientBoostingClassifier(),
+                model_final=GradientBoostingRegressor())
+est.fit(y, T, X=X, W=W)
+point = est.effect(X, T0=T0, T1=T1)
+
+est = LinearDRLearner()
+est.fit(y, T, X=X, W=W)
+est.effect(X, T0=t0, T1=t1)
+```
+* **Forest based estimators**
+<br>When reading this section I am struck by the fact that it is simply DML or DR learners but these tree based models have specific desireable properties.
+The estimators are `DMLOrthoForest`, `DROrthoForest`, `CausalForestDML`, `ForestDRLearner`. 
+Generally speaking this class of estimators are good when you have a lot of features, no good idea of how the effect heterogeneity looks like and they support confidence intervals. </br>
+```python
+from econml.orf import DMLOrthoForest, DROrthoForest
+from econml.sklearn_extensions.linear_model import LinearRegression, WeightedLasso
+
+est = DMLOrthoForest(n_trees=1, max_depth=1, subsample_ratio=1,
+                     model_T=LinearRegression(),
+                     model_Y=LinearRegression())
+est.fit(Y, T, X=W, W=W)
+
+est = DROrthoForest(n_trees=1, max_depth=1, subsample_ratio=1,
+                    propensity_model=sklearn.linear_model.LogisticRegression(),
+                    model_Y=LinearRegression())
+est.fit(Y, T, X=W, W=W)
+
+est = DMLOrthoForest(n_trees=100,
+                     max_depth=5,
+                     model_Y=WeightedLasso(alpha=0.01),
+                     model_T=WeightedLasso(alpha=0.01))
+est.fit(Y, T, X=X, W=W)
+```
+* **Meta-learners**
+<br>This class of estimators generally do not give confidence intervals but offer full flexibility in model selection.
+Other than `NonParamDML` and `DRLearner` from before; this section convers T-, S- and X-learners as well as Domain Adaption Learner.
+For a binary treatment $T$ (0 or 1) the T-learner trains one model $M_i(Y_i \sim X_i)$ per treatment and estimates the CATE as $M_1(X_1) - M_0(X_0)$.
+The S-learner trains one model with the treatment $T$ as one-hot encoded, the CATE estimate is therefore $M(X,T=1) - M(X,T=0)$.
+The X-learner trains two models like the T-learner, 
+calculates the residuals $D_1 = Y_1 - M_1(X_1)$ and $D_0 = M_0(X_0) - Y_0$, 
+fits the residuals with another pais of models $W_i(D_i \sim X_i)$ and finally calculates the CATE as
+$\tau = g(x)W_0(x) + (1-g(x))W_1(x)$, where $g(x)$ is an estimation of $p(T = 1\|X)$.
+The Domain Adaption Learner is a variation of the X-learner that weights 
+$M_0(Y_0 \sim X_0, w = \frac{g(X_0)}{1-g(X_0)})$ and $M_1(Y_1 \sim X_1, w = \frac{1-g(X_1)}{g(X_1)})$,
+then it similarly calculates residuals but fits a combined model $D$.</br>
+
+### Method 3 - Instrumental variables
+
+An instrument is a variable that has an effect on the treatment but not directly with the outcome.
+The IV methods allows you estimate CATE without all confounders if you have a valid instrument.
+However, if the effect on the treament is weak then the methods tend to be biased than measured confounders.
+The best instruments are typically randomized or arbitrary assignments. 
+This is why IV methods typically are used for A/B testing or when a person from a pool as been assign to decide treatment.
+
+The IV estimators in EconML are `OrthoIV`, `DMLIV`, `NonParamDMLIV`, `LinearDRIV`, 
+`SparseLinearDRIV`, `ForestDRIV`, `IntentToTreatDRIV`, `LinearIntentToTreatDRIV`
+where the DML, DR are the methods from before. 
+Intent to treat simply means that there is a randomized assignment of treatment groups which we use to analyse our results against.
+
+```python
+from econml.iv.dr import LinearIntentToTreatDRIV
+
+est = LinearIntentToTreatDRIV()
+est.fit(y, T, Z=Z, X=X, W=X)
+est.effect(X)
+```
+
+### Bonus method - Dynamic double machine learning
+
+EconML also has a section on dynamic estimation methods.
+These are cases where multiple treatments have been offered over time and some final outcome is of interest.
+[This article from 2021](https://arxiv.org/pdf/2002.07285) described the methodology.
+
+```python
+from econml.panel.dml import DynamicDML
+
+est = DynamicDML()
+est.fit(y_dyn, T_dyn, X=X_dyn, W=W_dyn, groups=groups)
+est.effect(X)
+```
+
+### Side note on EconML - Federated learning
+
+Federated learning is definitely a topic for another post but it seems that
+CATE estimation is something that can be nicely distributed across multiple models.
+This is of course interesting in case one is prohibited from aggregating data from multiple sources.
+
+## DoWhy
+
+DoWhy is a tool that builds on tools like EconML that is made for tasks like:
+* Estimating causal effects
+* Quantify causal influence
+* Root-cause analysis and explaination
+* Asking and answering what-if questions
+* Predicting outcome for out-of-distribution samples
+
+DoWhy has four steps to causal inference:
+1. Modeling
+2. Identification
+3. Estimation
+4. Refuting
+
+To run DoWhy one requires a causal graph of their problem (part of modeling).
+These are best constructed using domain knowledge but can be assisted by data-driven methods like those from `causal-learn`.
+DoWhy expects the causal graphs to be encoded in a `networkx` graph.
+
+### Graphical causal models
+
+A GCM is a combination of a causal direct acyclic graph (DAG) of variables and a causal mechanism for each of the variables.
+The mechanisms can be purely stochastic, conditional stochastic or functional.
+A GCM with stochastic parents and conditional stochastic children is called a probabalistic causal model (PCM).
+A GCM with stochastic parents and functional children is called a structural causal model (SCM).
+An invertible SCM (ISCM) has invertible function, the most common being additive noise models $X_i = f(PA_{X_i}, N_i) = f'(PA_{X_i}) + N_i$,
+where $X_i$ is the variable at node $i$, $PA_{X_i}$ are its parents, $N_i$ is noise.
+
+With a GCM one can hope to adress Judea Pearl's three levels of causality:
+1. Association - *What do we observe when X = x?* - PCM, SCM
+2. Intervention - *What will happen if we change X?* - PCM, SCM
+3. Counterfactuals - *What would we have observed if X had taken a different value?* - ISCM
+
+Here is how to set up a SCM for three variables $X, Y, Z$ in a chain.
+
+```python
+from dowhy import gcm
+import networkx as nx
+causal_model = gcm.StructuralCausalModel(nx.DiGraph([("X", "Y"), ("Y", "Z")]))
+gcm.auto.assign_causal_mechanisms(causal_model, data)
+# alternatively (manually)
+# causal_model.set_causal_mechanism('X', gcm.EmpiricalDistribution())
+# causal_model.set_causal_mechanism('Y', gcm.AdditiveNoiseModel(gcm.ml.create_linear_regressor()))
+# causal_model.set_causal_mechanism('Z', gcm.AdditiveNoiseModel(gcm.ml.create_linear_regressor()))
+gcm.fit(causal_model, data)
+```
+
+When we have a GCM we can draw samples from it like:
+```python
+generated_data = gcm.draw_samples(causal_model, num_samples=1000)
+```
+
+And to evaluate it:
+```python
+summary_evaluation = gcm.evaluate_causal_model(
+    causal_model, 
+    data, 
+    compare_mechanism_baselines = True
+)
+print(summary_evaluation)
+```
+
+#### Confidence intervals
+Due to the random nature of the data and model fitting it is recommended by the authors of PyWhy to bootstrap confidence intervals.
+This can be done to multiple rounds of training or just to the inference (when training is expensive).
+
+```python
+Z = np.random.normal(loc=0, scale=1, size=1000)
+X = 2*Z + np.random.normal(loc=0, scale=1, size=1000)
+Y = 3*X + 4*Z + np.random.normal(loc=0, scale=1, size=1000)
+data = pd.DataFrame(dict(X=X, Y=Y, Z=Z))
+
+causal_model = gcm.StructuralCausalModel(
+    nx.DiGraph([('Z', 'Y'), ('Z', 'X'), ('X', 'Y')])
+)
+gcm.auto.assign_causal_mechanisms(causal_model, data)
+# fit model multiple times to get CI
+strength_median, strength_intervals = gcm.confidence_intervals(
+    gcm.fit_and_compute(
+        gcm.arrow_strength,
+        causal_model,
+        bootstrap_training_data=data,
+        target_node='Y'
+    )
+)
+
+# alternatively: fit once and only calculate CI at inference
+gcm.fit(causal_model, data)
+strength_median, strength_intervals = gcm.confidence_intervals(
+    gcm.bootstrap_sampling(
+        gcm.arrow_strength,
+        causal_model,
+        target_node='Y'
+    )
+)
+```
+
+### Identification
+
+The main class of PyWhy called `CausalModel` expects data, treatment and outcome with an optional graph argument.
+If one supplies the graph then one can use the `.identify_effect()` method to get a report of methods for estimating the outcome.
+The methods include backdoor, frontdoor and instrumental variables.
+Essentially a methodology selection.
+
+### Refute
+
+#### Refuting a causal graph
+
+One concept of DoWhy is graph refutation, 
+meaning that we can test the assumptions that we have encoded through our domain knowledge or found using data-driven methods.
+This is done by testing all conditional independence constraints, also known as local Markov conditions (LMCs).
+
+```python
+from dowhy.gcm.falsify import falsify_graph
+# causal_graph is a networkx digraph
+result = falsify_graph(causal_graph, data, show_progress_bar=False)
+print(result)
+```
+
+The core idea behind LMCs are that there are three types of structures:
+* Colliders: $A \rightarrow B$, $C \rightarrow B$.
+* Forks: $B \rightarrow A$, $B \rightarrow C$.
+* Chains: $A \rightarrow B$, $B \rightarrow C$.
+
+By definition, $A$ and $C$ are statistically independent in a collider.
+In a fork they are dependent and in a chain $A$ and $C$ are *conditionally* independent on $B$.
+By testing these parts of the graph using observed data one can potentially refute invalid assumptions.
+
+#### Refuting effect estimates
+
+An effect refutation can be done either through negative control or sensitivity analysis.
+Negative control means that we consciously change something about the problem. 
+It is a family of sanity checks with two types:
+* Invariant transformations - These transformations do not change the premise of the problem. Methods include subsampling the data and adding an independent random common cause.
+* Nullifying transformations - Placebo treatment where one replaces the treatment with an independent random variable and dummy outcomes where one replaces the outcome should both nullify the effect.
+
+Sensivity analysis adds an artificial confounder to the problem and studies the impact on the effect.
+
+```python
+res_placebo = model.refute_estimate(
+    identified_estimand, 
+    estimate,
+    method_name="placebo_treatment_refuter", 
+    show_progress_bar=True, 
+    placebo_type="permute"
+)
+print(res_placebo)
+
+res_random = model.refute_estimate(
+    identified_estimand, 
+    estimate, 
+    method_name="random_common_cause", 
+    show_progress_bar=True
+)
+print(res_random)
+```
+
+# Examples of applying causal modeling
+
+## Exploring causes of hotel booking cancelations
+
+[Link](https://www.pywhy.org/dowhy/v0.13/example_notebooks/DoWhy-The%20Causal%20Story%20Behind%20Hotel%20Booking%20Cancellations.html#)
+
+[Data source](https://github.com/rfordatascience/tidytuesday/blob/master/data/2020/2020-02-11/readme.md)
+
+This example has you study the effect of assigning a different hotel room on cancelations.
+Following the example one gets an effect of -0.26 meaning a negative effect on cancelations.
+The causal graph they set up looks like this, which is quite a bowl of spaghetti:
+
+![...](/images/causal/causal_2.png)
+
+To decompose what they did, they say that *days in waiting list*, *hotel type*, *number of booking changes*,
+*is a repeated guest* and unknown confounders (U) influence whether or not a person gets assigned a different room.
+To then determine cancelation they say that *lead time* (number of days from booking to arrival), *days in waiting list*,
+*hotel type*, *total number of special requests*, *number of booking changes*, *different room assignment*, 
+*is a repeated guest*, *previous bookings canceled*, *total stay in days*, *number of guests* 
+and *required car spaces* impacts it.
+
+They reason that the negative effect is probably due to the unobserved confounder *"showed up to the hotel"* 
+because a different room assignment is likely to happen on the day of your check-in.
+And that was about it for this example, but lets dig a little deeper.
+
+First of all, what are we dealing with here?
+
+Here is a table of the *reservation status*. Note that both canceled and no-shows are counted as cancelations.
+
+| reservation_status | size  | mean of is_canceled |
+|--------------------|-------|------|
+| Canceled           | 42954 | 1.0  |
+| Check-Out          | 74745 | 0.0  |
+| No-Show            | 1203  | 1.0  |
+
+And the definition of *different room assignment* is *reserved room type* $\neq$ *assigned room type*.
+Here are the statistics for how often a room type was reserved / assigned and their corresponding mean of cancelations.
+
+| **Room type** | size of reserved | mean of reserved | size of assigned | mean of assigned |
+|---------------|------------------|------------------|------------------|------------------|
+| **A**         | 85601            | 0.392273         | 73863            | 0.445487         |
+| **B**         | 1118             | 0.329159         | 2163             | 0.236708         |
+| **C**         | 931              | 0.330827         | 2354             | 0.188615         |
+| **D**         | 19173            | 0.318208         | 25166            | 0.252603         |
+| **E**         | 6497             | 0.293828         | 7738             | 0.253554         |
+| **F**         | 2890             | 0.304498         | 3732             | 0.248124         |
+| **G**         | 2083             | 0.366299         | 2539             | 0.307208         |
+| **H**         | 601              | 0.407654         | 708              | 0.354520         |
+| **L**         | 6                | 0.333333         | 1                | 1.000000         |
+| **P**         | 2                | 1.000000         | 2                | 1.000000         |
+| **I**         |                  |                  | 357              | 0.014006         |
+| **K**         |                  |                  | 279              | 0.043011         |
+
+Note that only room type A is where we have fewer assignments than resvations and that it is the only type
+where the rate of cancelation goes up (we except L and P as they are so few observations).
+Another observation is I and K, which are not available during reservation but can be assigned
+and they have a very low rate of cancelation.
+
+| reserved_room_type | assigned_room_type | size | mean of is_canceled |
+|--------------------|--------------------|------|---------------------|
+| A                  | I                  | 211  | 0.009479            |
+| C                  | I                  | 9    | 0.111111            |
+| D                  | I                  | 67   | 0.014925            |
+| E                  | I                  | 39   | 0.000000            |
+| F                  | I                  | 10   | 0.000000            |
+| G                  | I                  | 15   | 0.066667            |
+| H                  | I                  | 6    | 0.000000            |
+| A                  | K                  | 210  | 0.033333            |
+| B                  | K                  | 2    | 0.000000            |
+| D                  | K                  | 44   | 0.113636            |
+| E                  | K                  | 16   | 0.000000            |
+| F                  | K                  | 3    | 0.000000            |
+| G                  | K                  | 4    | 0.000000            |
+
+It also seems that they have a roughly equal assignment to the room reservation frequency (A then D, E and B, C, F, G).
+Now, it could just be that room types I and K are *really nice* or this is the frequency of cancelation when a customer
+turns up to the hotel. After all it is not that likely that you are going to cancel in the hotel lobby.
+Actually, there is a way to somewhat gauge the quality of the rooms, which it by the average rate *adr* column.
+
+| **assigned_room_type** | count | mean | std | min | 25% | 50% | 75% | max |
+|------------------------|-------|------|-----|-----|-----|-----|-----|-----|
+| **A**                  | 40958 | 93   | 38  | 0   | 68  | 90  | 114 | 337 |
+| **B**                  | 1651  | 94   | 39  | 0   | 75  | 92  | 113 | 276 |
+| **C**                  | 1910  | 107  | 65  | 0   | 61  | 88  | 144 | 508 |
+| **D**                  | 18809 | 101  | 49  | 0   | 64  | 96  | 134 | 376 |
+| **E**                  | 5776  | 112  | 56  | 0   | 69  | 100 | 149 | 452 |
+| **F**                  | 2806  | 142  | 68  | 0   | 86  | 149 | 191 | 368 |
+| **G**                  | 1759  | 158  | 80  | 0   | 99  | 153 | 216 | 510 |
+| **H**                  | 457   | 159  | 84  | -6  | 93  | 150 | 211 | 402 |
+| **I**                  | 352   | 41   | 65  | 0   | 0   | 0   | 63  | 310 |
+| **K**                  | 267   | 53   | 61  | 0   | 0   | 8   | 100 | 283 |
+
+It does seem like A through H is an increasing price ladder, meaning that H is more exclusive than A.
+Note that I and K have a low average and even medians close to or are zero. So these room assignments tend to be free(!).
+So if we consider a higher letter to be an upgrade, how often does one get upgraded when a different room is assigned?
+
+|                | **Stayed** | **Canceled** |
+|----------------|------------|--------------|
+| **Downgraded** | 617        | 21           |
+| **Upgraded**   | 13289      | 772          |
+
+For cancelations the upgrade rate is 97.4% and for regular stays it was 95.6%.
+If one flips the question the cancelation rates for upgrades is 5.5% and for downgrades at 3.3%.
+This again is another counter-intuitive insight, how does downgrades make people more likely to not cancel?
+
+But another observation is the inbalance between stayed and canceled!
+Note from the first table that it is like 44k canceled to 75k stays.
+The imbalance is also telling of the nature of this problem.
+Most room type changes occur to people who stay:
+
+|                | **Stayed** | **Canceled** |
+|----------------|------------|--------------|
+| **Got the same room type**    | 60839        | 43364           |
+| **New room type assigned**    | 13906      | 793          |
+
+So what even correlates with *assigned a different room type*?
+
+|                                | correlation |
+|--------------------------------|-------------|
+| is_canceled                    | -0.25       |
+| lead_time                      | -0.14       |
+| adr                            | -0.13       |
+| total_stay                     | -0.10       |
+| guests                         | -0.05       |
+| previous_cancellations         | -0.03       |
+| days_in_waiting_list           | -0.01       |
+| arrival_date_day_of_month      | -0.00       |
+| has_children                   | 0.01        |
+| arrival_date_week_number       | 0.01        |
+| has_babies                     | 0.02        |
+| total_of_special_requests      | 0.02        |
+| previous_bookings_not_canceled | 0.04        |
+| is_alone                       | 0.07        |
+| required_car_parking_spaces    | 0.08        |
+| is_repeated_guest              | 0.09        |
+| booking_changes                | 0.09        |
+
+*Not canceling* (in other words, showing up), booking far in advance, paying a lot, having a long stay,
+being a repeated guest, requiring car parking and being alone.
+And what correlates with canceling?
+
+|                                | correlation |
+|--------------------------------|-------------|
+| different_room_assigned        | -0.25       |
+| total_of_special_requests      | -0.24       |
+| required_car_parking_spaces    | -0.19       |
+| booking_changes                | -0.14       |
+| is_repeated_guest              | -0.09       |
+| is_alone                       | -0.08       |
+| previous_bookings_not_canceled | -0.06       |
+| has_babies                     | -0.03       |
+| arrival_date_day_of_month      | -0.01       |
+| has_children                   | -0.00       |
+| arrival_date_week_number       | 0.01        |
+| total_stay                     | 0.02        |
+| guests                         | 0.05        |
+| adr                            | 0.05        |
+| days_in_waiting_list           | 0.05        |
+| previous_cancellations         | 0.11        |
+| lead_time                      | 0.29        |
+
+After turning this problem up and down it seems like 1. most room type changes are actually upgrades and 
+2. that it when the treatment is applied (before or in the hotel lobby) matters for studying this phenomena further.
+Proposing a different (simpler) model does not move the remove this issue.
+
+![...](/images/causal/causal_3.png)
+
+The effect estimate for the above example is -0.35 using propensity score weighting.
+There are also no strong instrument variables for different room assignment.
+Nonetheless the dataset is interesting to study but probably not the best example for causal modeling.
+
+
+## Root-cause of elevated latencies in a microservice architecture
+
+[Link](https://www.pywhy.org/dowhy/v0.13/example_notebooks/gcm_rca_microservice_architecture.html)
+
+The data is simulated using truncated exponentials, half normals and a Bernoulli hit-miss of the cache.
+
+The causal graph reflects the system architecture.
+
+![...](/images/causal/causal_4.png)
+
+Using this causal graph and creating the model as:
+```python
+from dowhy import gcm
+from scipy.stats import halfnorm
+
+causal_model = gcm.StructuralCausalModel(causal_graph)
+for node in causal_graph.nodes:
+    if len(list(causal_graph.predecessors(node))) > 0:
+        causal_model.set_causal_mechanism(node, gcm.AdditiveNoiseModel(gcm.ml.create_linear_regressor()))
+    else:
+        causal_model.set_causal_mechanism(node, gcm.ScipyDistribution(halfnorm))
+```
+
+One can fit the model to the data and evaluate the fit.
+For empirical distributions one looks at the Kullback-Leibler (KL) divergence.
+All of the KL divergence is low so nothing to note there. 
+For the dependent nodes the documentation recomments the normalized continuous ranked probablility (nCRPS).
+CRPS generalizes the mean absolute percentage error (MAPE) to probabalistic predictions.
+It gives a good idea of the model accuracy and calibration to the causal mechanisms.
+
+
+|                           | **KL** | **nCRPS** |
+|---------------------------|--------|-----------|
+| **Customer DB**           | 0.042  |           |
+| **Shipping Cost Service** | 0.010  |           |
+| **Product DB**            | 0.065  |           |
+| **Order DB**              | 0.049  |           |
+| **Auth Service**          |        | 0.29      |
+| **Caching Service**       |        | 0.45      |
+| **Order Service**         |        | 0.30      |
+| **Product Service**       |        | 0.36      |
+| **API**                   |        | 0.11      |
+| **www**                   |        | 0.07      |
+| **Website**               |        | 0.09      |
+
+Note that product service and caching service have relatively high nCRPS.
+The evaluator logic picks out that this is only "fair" model perfromance and not "good" like the others
+(presumably the threshold is $\approx 0.3$).
+This is expected as the data generation process for these two variables are non-additive noise models.
+The cache has a multiplicative aspect due to cache misses and the product service is a max function of its upstream components, caching service included.
+
+Nonetheless, the model can still be used to produce insights.
+
+Next step is to use the [attribute_anomalies](https://proceedings.mlr.press/v162/budhathoki22a/budhathoki22a.pdf) function to
+score anomalous observations. In this example they have created an anomalous version of the data where the website is slower.
+By bootstrapping one can get confidence intervals for this estimation as:
+```python
+median_attribs, uncertainty_attribs = gcm.confidence_intervals(
+    gcm.fit_and_compute(
+        gcm.attribute_anomalies,
+            causal_model,
+            normal_data,
+            target_node='Website',
+            anomaly_samples=outlier_data.iloc[[0]]
+    ),
+    num_bootstrap_resamples=10
+)
+```
+
+![...](/images/causal/causal_5.png)
+
+Here the attribution states that the cache is the main driver of high latency.
+Customer DB has a negative contribution, meaning that it was fast.
+Product service also shows positive contribution but this could be a leaking effect from the caching due to the nonlinear relationships.
+In order to get more clarity than this anecdotal example we can analyze 1000 anomalous samples using the [distribution_change](https://assets.amazon.science/b6/c0/604565d24d049a1b83355921cc6c/why-did-the-distribution-change.pdf) function.
+
+```python
+median_attribs, uncertainty_attribs = gcm.confidence_intervals(
+    lambda : gcm.distribution_change(
+        causal_model,
+        normal_data.sample(frac=0.6),
+        outlier_data.sample(frac=0.6),
+        'Website',
+        difference_estimation_func = lambda x, y: np.mean(y) - np.mean(x)),
+    num_bootstrap_resamples = 10
+)
+```
+
+![...](/images/causal/causal_6.png)
+
+Clear as day, it is the caching service that has experienced a distribution shift.
+Using our causal model we can also simulate an intervention where we allocate resources from shupping cost service to caching service.
+We trade 1 second faster of caching service for 2 seconds slower shipping cost. The code for this:
+```python
+median_mean_latencies, uncertainty_mean_latencies = gcm.confidence_intervals(
+    lambda : gcm.fit_and_compute(
+        gcm.interventional_samples,
+        causal_model,
+        outlier_data,
+        interventions = {
+            "Caching Service": lambda x: x-1,
+            "Shipping Cost Service": lambda x: x+2
+        },
+        observed_data = outlier_data)().mean().to_dict(),
+    num_bootstrap_resamples=10
+)
+```
+The median mean latency of the website changes from 5.5 to 4.5 seconds.
+
+
+## Impact of 401(k) eligibility on net financial assets
+
+[Link](https://www.pywhy.org/dowhy/v0.13/example_notebooks/gcm_401k_analysis.html)
+
+[Data source](https://martinspindler.r-universe.dev/datasets)
+
+In this example the authors propose to study the effect of being eligible for a 401(k) plan on the net financial assets.
+This is basically saying "does this plan make people wealthier?".
+Running the example one is struck with the fact that connecting a binary variable to a number of $s becomes tricky.
+Retirement plans like 401(k) growths with age and higher income. It is a compounded process.
+
+Their proposed causal graph is one where all covariates impact the treatment and the outcome.
+
+![...](/images/causal/causal_7.png)
+
+By pruning edges using causal minimality tests one gets the following causal graph instead:
+
+![...](/images/causal/causal_7_2.png)
+
+The code for the causal minimality test: 
+```python
+def test_causal_minimality(graph, target, data, method='kernel', significance_level=0.10, fdr_control_method='fdr_bh'):
+    p_vals = []
+    all_parents = list(graph.predecessors(target))
+    for node in all_parents:
+        tmp_conditioning_set = list(all_parents)
+        tmp_conditioning_set.remove(node)
+        p_vals.append(
+            gcm.independence_test(
+                data[target].to_numpy(), 
+                data[node].to_numpy(), 
+                data[tmp_conditioning_set].to_numpy(), 
+                method=method
+            )
+        )
+
+    if fdr_control_method is not None:
+        p_vals = multipletests(p_vals, significance_level, method=fdr_control_method)[1]
+
+    nodes_above_threshold = []
+    nodes_below_threshold = []
+    for i, node in enumerate(all_parents):
+        if p_vals[i] < significance_level:
+            nodes_above_threshold.append(node)
+        else:
+            nodes_below_threshold.append(node)
+
+    print("Significant connection:", [(n, target) for n in sorted(nodes_above_threshold)])
+    print("Insignificant connection:", [(n, target) for n in sorted(nodes_below_threshold)])
+
+    return sorted(nodes_below_threshold)
+```
+
+Upon seeing this I also thought that it would be interesting to try out some causality identification methods from causal-learn.
+Using Peter-Clark algorithm for causal discovery one gets the following graph:
+
+![...](/images/causal/causal_7_3.png)
+
+And using Fast Causal Inference (FCI) one gets this one:
+
+![...](/images/causal/causal_7_4.png)
+
+And for Greedy Equivalence Search (GES):
+
+![...](/images/causal/causal_7_5.png)
+
+And finally, Linear, Non-Gaussian Acyclic Model (LiNGAM):
+
+![...](/images/causal/causal_7_6.png)
+
+Out of all the methods only LiNGAM put e401 $\rightarrow$ net financial assets.
+
+To continue with the LiNGAM suggestion after pruning some edges:
+
+![...](/images/causal/causal_7_7.png)
+
+Using the auto assignment of causal mechanisms `gcm.auto.assign_causal_mechanisms` yields:
+
+```
+age Discrete AdditiveNoiseModel using HistGradientBoostingRegressor
+inc Discrete AdditiveNoiseModel using HistGradientBoostingRegressor
+fsize Discrete AdditiveNoiseModel using Pipeline
+educ Discrete AdditiveNoiseModel using LinearRegression
+db Empirical Distribution
+marr Discrete AdditiveNoiseModel using HistGradientBoostingRegressor
+twoearn Discrete AdditiveNoiseModel using HistGradientBoostingRegressor
+pira Discrete AdditiveNoiseModel using Pipeline
+hown Discrete AdditiveNoiseModel using HistGradientBoostingRegressor
+hequity Empirical Distribution
+hmort Discrete AdditiveNoiseModel using HistGradientBoostingRegressor
+nohs Discrete AdditiveNoiseModel using Pipeline
+hs Discrete AdditiveNoiseModel using Pipeline
+e401 Classifier FCM based on HistGradientBoostingClassifier()
+net_tfa Discrete AdditiveNoiseModel using HistGradientBoostingRegressor
+```
+
+The model evaluation suite claims that the fit is only subpar, 
+which makes sense that there is a ton of noise and the causality not being that strong.
+When we perform the same CATE per income bracket estimation as in the example we see some difference:
+
+![...](/images/causal/causal_13.png)
+
+Note that the effect has a lower bound of approximately 0 for the lower 50% and that the higher earners have a higher lower bound.
+This basically means that the effect is more inequal than the example made it out to be.
+
+
+## Intrinsic influence on river flow
+
+In this example the authors extract flow (but personally I prefer water level) data for 5 measuring stations.
+The [Department for Environment Food & Rural Affairs](https://environment.data.gov.uk/hydrology/explore) provides it for free.
+The five stations map out three tributaries to River Ribble, which is measure upsteam at New Jumbles Rock and downstream at Samlesbury
+
+![...](/images/causal/river-map.jpg)
+
+The following causal graph can be constructed:
+
+![...](/images/causal/causal_8.png)
+
+And fitted to the time series of the level measurements, taken every 15 mins.
+Below is a line chart of the water levels for about a year.
+As one can expect; floodings correlate.
+But we want to figure out which are the more significant contributors.
+
+![...](/images/causal/causal_10.png)
+
+Using simple statistics from the table below we see that Henthorn both has the highest water level and correlation to Samlesbury.
+So it could be that it contibutes the most. 
+Although, consider that New Jumbles Rock add no new tributary, so its contribution should be negible.
+
+| ****                 | **Correlation to Samlesbury** | **Average river level** |
+|----------------------|-------------------------------|-------------------------|
+| **Hodder-Place**     | 0.883594                      | 0.489060                |
+| **Whalley-Weir**     | 0.898620                      | 0.489290                |
+| **New-Jumbles-Rock** | 0.958220                      | 0.486724                |
+| **Henthorn**         | 0.962957                      | 0.576654                |
+| **Samlesbury**       | 1.000000                      | 1.227162                |
+
+Setting up the structual causal model as
+```python
+scm_river = gcm.StructuralCausalModel(river_graph)
+gcm.auto.assign_causal_mechanisms(scm_river, df)
+gcm.fit(scm_river, df)
+```
+
+One can then calculate the [intrincic_causal_influence](https://proceedings.mlr.press/v238/janzing24a/janzing24a.pdf) for this model and data.
+```python
+iccs_river = gcm.intrinsic_causal_influence(scm_river, target_node='Samlesbury')
+```
+
+By normalizing the intrincic causal influence one gets the following attribution:
+![...](/images/causal/causal_9.png)
+
+Note that New Jumbles Rock is close to zero, as expected.
+Samlesbury has some unexplained noise, probably due to water seeping in between the measurement stations.
+The highest contribution comes from Henthorn, then Hoddler-Place and lastly Whalley-Weir.
+
+
+## Counterfactual analysis in medical care
+
+In this example the authors generate synthetic data.
+There are 3 variables:
+* Condition, binary - Does the patient have a rare condition, for example an allergy.
+* Treatment, 3 options - 0 = Do nothing, 1 = Treatment 1, 2 = Treatment 2.
+* Vision, real value - The patients vision after treatment.
+
+We get no information of the vision before treatment, which is basically the noise in this problem.
+The causal model is can assume is simple.
+
+![...](/images/causal/causal_11.png)
+
+The `gcm.auto.assign_causal_mechanisms` fits an additive noise model using a histogram gradient boosting regressor.
+The distributions for treatment and condition are empirical.
+
+Now, given a specific patient *Alice* we are interested in a counterfactual question.
+She has a rare condition (= 1), took treatment 2 and she got a good vision after the treatment.
+Using our model one can pose the counterfactual question of what would have happened if she would not have done the treatment or treatment 1.
+
+```python
+counterfactual_data1 = gcm.counterfactual_samples(
+    causal_model,
+    {'Treatment': lambda x: 1},
+    observed_data = specific_patient_data
+)
+
+counterfactual_data2 = gcm.counterfactual_samples(
+    causal_model,
+    {'Treatment': lambda x: 0},
+    observed_data = specific_patient_data
+)
+```
+
+![...](/images/causal/causal_12.png)
