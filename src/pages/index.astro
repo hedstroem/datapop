@@ -8,9 +8,9 @@ const posts = (await getCollection('blog'))
   .slice(0, 3);
 
 const topics = [
-  { icon: Baby,   title: "", description: "This started as my paternity leave blog to exercise my mind." },
+  { icon: Baby,   title: "", description: "Hi there! Where are you? My paternity leave blog. It is where I go to exercise my mind." },
   { icon: BarChart3, title: "",      description: "I'm interested in data, statistics, algorithms, engineering, people, business, leadership, e.t.c." },
-  { icon: MessageCircleQuestionMark ,    title: "",      description: "Why? I'd like to show off my style of thinking. It will be a testament to how I think and operate." }
+  { icon: MessageCircleQuestionMark ,    title: "",      description: "By employment I am a specialist but I like to consider myself as a technically minded generalist." }
 ];
 ---
 
@@ -24,7 +24,7 @@ const topics = [
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
       {topics.map(({ icon: Icon, title, description }) => (
         <div class="p-6 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
-          <Icon className="w-8 h-8 mb-3 text-blue-600 dark:text-blue-400" />
+          <Icon className="w-8 h-8 mb-3 text-green-600 dark:text-green-400" />
           <h3 class="font-display text-lg mb-2">{title}</h3>
           <p class="text-sm text-zinc-600 dark:text-zinc-400">{description}</p>
         </div>

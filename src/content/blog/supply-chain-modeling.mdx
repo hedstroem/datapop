@@ -1,0 +1,551 @@
+---
+title: 'Building a toy supply chain model'
+description: 'Using Python MIP and Polars'
+pubDate: 2025-09-02
+tags: ['linear-programming', 'supply-chain', 'polars']
+---
+
+In my current role I have worked with models of supply chains.
+These models tend to be built using mathematical programming, in particular linear programming (LP) or mixed integer LP (MILP).
+One typically starts off with a graph and later translate it into a program to solve.
+Here is an example of how to do it:
+
+* Raw materials, *R* - Gets produced or procured in source nodes.
+* Transportation edge, *g* - Moves raw materials into inventories or into industries, at a cost.
+* Inventory, *I* - Nodes that intermediately store raw materials or finished goods.
+* Industry, *P* - Nodes that transforms raw material into finished goods using recipes.
+* Customer or market, *M* - Sink nodes that absorbs finished goods.
+
+There are many practical planning questions that stem from these five concepts.
+* Which raw materials should one procure and when? 
+* How does transport capacity does one need?
+* What is the optimal transporation setup?
+* How should one utilize inventories to balance raw material or product flows?
+* Which recipes for production best utilize the raw material and logistics conditions?
+* How should customer or market demand be met cost-optimally?
+
+When creating a model to understand these questions one must understand the answer is only ever going to be as good as your data.
+Often one wants to not only understand how the business has been performing but how one should act in the future.
+That requires one to have qualified guesses for that the cost of raw materials, transportation, inventory and production will be.
+Not only that, the hardest thing is usually to tell what the market wants even just a few months in advance.
+
+Another thing to understand is that these models get **big** quick. 
+If you have 10 products to produce from 10 different variations of raw materials, transported in 10 different routes then there are 1000 combinations.
+One usually have to be smart about model building in order to reduce the number of options and at the same time, keeping model output within predicable bounds.
+An example of this is if you have a raw material plan. 
+Should you let the model pick how much to produce itself with the plan as the ceiling?
+Or should you maybe just force the model to stick to the plan and work with imports and inventories to manage what is missing?
+
+You pick the resolution to fit the problem.
+Do you need all the variants of raw materials or do you just need the big family of materials?
+This of course depends who you are building the model for in your organisation.
+
+## Toy example
+
+I created a toy example here using [Polars](https://docs.pola.rs/api/python/dev/reference/index.html) for data management and [Python-MIP](https://docs.python-mip.com/en/latest/quickstart.html) for optimization.
+
+```python
+import polars as pl
+import mip
+```
+
+We then hardcode some data for 3 months, 3 types of raw materials, 2 products using 3 different recipes:
+
+<details>
+  <summary>Expand to see dummy data</summary>
+
+<div style={{ fontSize: "0.7rem" }}>
+```python
+df_raw_materials = pl.DataFrame([
+    {"name":"R1", "product":"raw_material_1", "cost_per_unit":20.4, "t":1, "max_production":1000},
+    {"name":"R1", "product":"raw_material_1", "cost_per_unit":20.4, "t":2, "max_production":900},
+    {"name":"R1", "product":"raw_material_1", "cost_per_unit":20.4, "t":3, "max_production":1100},
+    {"name":"R1", "product":"raw_material_2", "cost_per_unit":16.9, "t":1, "max_production":400},
+    {"name":"R1", "product":"raw_material_2", "cost_per_unit":16.9, "t":2, "max_production":400},
+    {"name":"R1", "product":"raw_material_2", "cost_per_unit":16.9, "t":3, "max_production":400},
+    {"name":"R2", "product":"raw_material_1", "cost_per_unit":22.1, "t":1, "max_production":1000},
+    {"name":"R2", "product":"raw_material_1", "cost_per_unit":22.1, "t":2, "max_production":900},
+    {"name":"R2", "product":"raw_material_1", "cost_per_unit":22.1, "t":3, "max_production":1100},
+    {"name":"R2", "product":"raw_material_2", "cost_per_unit":17.2, "t":1, "max_production":400},
+    {"name":"R2", "product":"raw_material_2", "cost_per_unit":17.2, "t":2, "max_production":400},
+    {"name":"R2", "product":"raw_material_2", "cost_per_unit":17.2, "t":3, "max_production":400},
+    {"name":"R2", "product":"raw_material_3", "cost_per_unit":38.2, "t":1, "max_production":220},
+    {"name":"R2", "product":"raw_material_3", "cost_per_unit":38.2, "t":2, "max_production":220},
+    {"name":"R2", "product":"raw_material_3", "cost_per_unit":38.2, "t":3, "max_production":220},
+])
+
+df_inventories = pl.DataFrame([
+    {"name":"I1", "product":"raw_material_1", "cost_per_unit":2.5, "max_inventory":20000, "min_inventory":0, "initial_inventory":0},
+    {"name":"I1", "product":"raw_material_2", "cost_per_unit":2.5, "max_inventory":20000, "min_inventory":0, "initial_inventory":0},
+    {"name":"I2", "product":"raw_material_1", "cost_per_unit":3.1, "max_inventory":20000, "min_inventory":0, "initial_inventory":0},
+    {"name":"I2", "product":"raw_material_2", "cost_per_unit":3.1, "max_inventory":20000, "min_inventory":0, "initial_inventory":0},
+    {"name":"I2", "product":"raw_material_3", "cost_per_unit":3.1, "max_inventory":20000, "min_inventory":0, "initial_inventory":0},
+])
+
+df_industry_recipe = pl.DataFrame([
+    {"name":"P1", "recipe":1, "product": "product_1", "consumed":"raw_material_1", "quantity": 1},
+    {"name":"P1", "recipe":1, "product": "product_1", "consumed":"raw_material_2", "quantity": 0.8},
+    {"name":"P1", "recipe":2, "product": "product_1", "consumed":"raw_material_1", "quantity": 0.9},
+    {"name":"P1", "recipe":2, "product": "product_1", "consumed":"raw_material_2", "quantity": 0.7},
+    {"name":"P1", "recipe":2, "product": "product_1", "consumed":"raw_material_3", "quantity": 0.2},
+    {"name":"P1", "recipe":3, "product": "product_2", "consumed":"raw_material_1", "quantity": 0.9},
+    {"name":"P1", "recipe":3, "product": "product_2", "consumed":"raw_material_2", "quantity": 0.5},
+    {"name":"P1", "recipe":3, "product": "product_2", "consumed":"raw_material_3", "quantity": 0.4},
+])
+
+df_industry_production = pl.DataFrame([
+    {"name":"P1", "t":1, "production_capacity":10000},
+    {"name":"P1", "t":2, "production_capacity":10000},
+    {"name":"P1", "t":3, "production_capacity":10000},
+])
+
+df_market = pl.DataFrame([
+    {"name":"M1", "product": "product_1", "t":1, "price":100, "demand":1e9},
+    {"name":"M1", "product": "product_1", "t":2, "price":100, "demand":1e9},
+    {"name":"M1", "product": "product_1", "t":3, "price":100, "demand":1e9},
+    {"name":"M1", "product": "product_2", "t":1, "price":85, "demand":1e9},
+    {"name":"M1", "product": "product_2", "t":2, "price":85, "demand":1e9},
+    {"name":"M1", "product": "product_2", "t":3, "price":85, "demand":1e9},
+])
+
+df_transport = pl.DataFrame([
+    {"name":"gR1I1", "from_node":"R1", "to_node":"I1", "cost_per_unit":10.0, "max_capacity": 10000, "min_capacity":0},
+    {"name":"gR1I2", "from_node":"R1", "to_node":"I2", "cost_per_unit":13.0, "max_capacity": 10000, "min_capacity":0},
+    {"name":"gR2I1", "from_node":"R2", "to_node":"I1", "cost_per_unit": 7.0, "max_capacity": 10000, "min_capacity":0},
+    {"name":"gR2I2", "from_node":"R2", "to_node":"I2", "cost_per_unit":12.0, "max_capacity": 10000, "min_capacity":0},
+    {"name":"gI1P1", "from_node":"I1", "to_node":"P1", "cost_per_unit": 9.0, "max_capacity": 10000, "min_capacity":0},
+    {"name":"gI2P1", "from_node":"I2", "to_node":"P1", "cost_per_unit": 6.0, "max_capacity": 10000, "min_capacity":0},
+    {"name":"gR1P1", "from_node":"R1", "to_node":"P1", "cost_per_unit":15.0, "max_capacity": 10000, "min_capacity":0},
+    {"name":"gR2P1", "from_node":"R2", "to_node":"P1", "cost_per_unit":17.0, "max_capacity": 10000, "min_capacity":0},
+    {"name":"gP1M1", "from_node":"P1", "to_node":"M1", "cost_per_unit": 0.0, "max_capacity":  1e12, "min_capacity":0},
+])
+```
+</div>
+</details>
+
+After that we can start with model building.
+We need to create variables, constraints and an objective.
+Because we want to maximize profits in this example we want a maximization model.
+We will add the constraints as either $=$ (equal) or $\leq$ (less than equal) between a left and right hand side.
+The objective is initialized to 0.
+
+```python
+model = mip.Model(sense = mip.MAXIMIZE)
+
+objective = 0
+constraint_leq_lhs = []
+constraint_leq_rhs = []
+constraint_eq_lhs = []
+constraint_eq_rhs = []
+```
+
+To create variables we define a helper function for Polars.
+This is mainly because Polars is a little icky with arbitrary types, so they have to be treated with tongs.
+Basically Polars will treat them as Python objects in a non-vectorized way (which it warns you is slow).
+That is no real issue as we are mainly interested in Polars API, which I prefer over Pandas.
+
+The first part of `create_variables` parses if the lower and upper bound are columns,
+otherwise they are assumed to be numbers or something like `mip.INF`.
+Then on the dataframe of interest we join a variable dataframe.
+The variable dataframe is a dataframe of unique combinations of the dimension columns.
+The variables are created using `model.add_var(...)`, which requires a UDF-friendly Polars function `.map_elements(...)` to run.
+Since we require multiple columns in the naming process we must define a struct (the default is that Polars operate on columns not on rows).
+In order to not make Polars freak out at this new column we specify the data types to be `pl.Object` which is the catch-all.
+
+```python
+def create_variables(model, df, dim_columns, lb, ub, name_prefix = ""):
+    lb_is_str = False
+    ub_is_str = False
+    all_input_columns = dim_columns.copy()
+    if isinstance(lb, str):
+        all_input_columns += [lb]
+        lb_is_str = True
+    if isinstance(ub, str):
+        all_input_columns += [ub]
+        ub_is_str = True
+    return df.join(
+            df[all_input_columns]
+            .unique()
+            .with_columns(
+                pl.struct(all_input_columns)
+                .map_elements(
+                    lambda row: 
+                        model.add_var(
+                            name=name_prefix+"-".join([str(row[col]) for col in dim_columns]),
+                            lb = lb if not lb_is_str else row[lb],
+                            ub = ub if not ub_is_str else row[ub],
+                        ),
+                    return_dtype=pl.Object
+                )
+                .alias(VAR)
+            )[dim_columns + [VAR]],
+            on = dim_columns,
+            how = "left"
+        )
+```
+
+<details>
+  <summary>Expand to see how the variables are created</summary>
+
+```python
+NAME = "name"
+PRODUCT = "product"
+TIMESTEP = "t"
+FROM_NODE = "from_node"
+TO_NODE = "to_node"
+VAR = "variable"
+CONSUMED = "consumed"
+RECIPE = "recipe"
+
+timesteps = pl.DataFrame({TIMESTEP:[1,2,3]})
+
+v_raw_material_production = create_variables(
+    model,
+    df_raw_materials, 
+    [TIMESTEP, NAME, PRODUCT], 
+    lb = 0, 
+    ub = "max_production"
+)
+
+v_raw_material_inventory = create_variables(
+    model,
+    df_inventories
+    .join(timesteps, how="cross"), 
+    [TIMESTEP, NAME, PRODUCT], 
+    lb = "min_inventory", 
+    ub = "max_inventory"
+)
+
+v_production_per_recipe = create_variables(
+    model,
+    df_industry_recipe
+    .join(timesteps, how="cross"),
+    [TIMESTEP, RECIPE], 
+    name_prefix="recipe_",
+    lb = 0, 
+    ub = mip.INF
+)
+
+products_transport_to = pl.concat([
+    df_inventories[[NAME, PRODUCT]],
+    df_industry_recipe[[NAME, CONSUMED]].rename({CONSUMED:PRODUCT}),
+    df_market[[NAME, PRODUCT]]
+]).unique().rename({NAME:TO_NODE}).sort([TO_NODE, PRODUCT])
+
+v_transport = create_variables(
+    model,
+    df_transport
+    .join(timesteps, how="cross")
+    .join(products_transport_to, on = TO_NODE, how = "left"),
+    [TIMESTEP, FROM_NODE, TO_NODE, PRODUCT], 
+    lb = "min_capacity", 
+    ub = "max_capacity"
+)
+```
+</details>
+
+After this we can start defining constraints, which is the bulk of our work.
+In order to do it more compactly we define two more helper functions `sum_variables` and `custom_elementwize_series`.
+Both of them are essentially just macros for applying `mip.xsum` is less and more elaborate ways.
+
+
+<details>
+  <summary>Expand to see how the constraints are created</summary>
+
+```python
+DEMAND = "demand"
+FLOW = "flow"
+LHS = "left_hand_side"
+RHS = "right_hand_side"
+TSHIFT = "_tshifted"
+SCALED = "_scaled"
+
+c_raw_material_transport = (
+    v_transport
+    .group_by([TIMESTEP, FROM_NODE, PRODUCT])
+    .agg(sum_variables(output_name=LHS))
+    .rename({FROM_NODE:NAME})
+    .join(v_raw_material_production, on = [TIMESTEP, NAME, PRODUCT])
+    .rename({VAR:RHS})
+)
+
+c_raw_material_inventory_io = (
+    v_transport
+    .filter(pl.col(TO_NODE).str.starts_with("I"))
+    .drop(NAME).rename({TO_NODE:NAME})
+    .group_by(TIMESTEP, NAME, PRODUCT)
+    .agg(sum_variables(output_name="incoming"))
+    .join(
+        v_transport
+        .filter(pl.col(FROM_NODE).str.starts_with("I"))
+        .drop(NAME).rename({FROM_NODE:NAME})
+        .group_by(TIMESTEP, NAME, PRODUCT)
+        .agg(sum_variables(output_name="outgoing")),
+        on = [TIMESTEP, NAME, PRODUCT],
+        how = "left"
+    )
+    .with_columns(
+        custom_elementwize_series(
+            output_name=LHS, 
+            ordered_input=["incoming", "outgoing"], 
+            ordered_input_function=lambda i, o: mip.xsum([i, -o])
+        )
+    )
+    .join(
+        v_raw_material_inventory.with_columns(pl.col(VAR))
+        .join(
+            v_raw_material_inventory.with_columns(pl.col(TIMESTEP)+1),
+            on = [TIMESTEP, NAME, PRODUCT],
+            how = "left",
+            suffix = TSHIFT
+        )
+        .with_columns(
+            custom_elementwize_series(
+                output_name=RHS, 
+                ordered_input=[VAR, VAR + TSHIFT], 
+                ordered_input_function=lambda t, tn: (
+                    mip.xsum([t, -tn]) if (t is not None and tn is not None) else 0
+                )
+            )
+        ),
+        on = [TIMESTEP, NAME, PRODUCT],
+        how = "left"
+    )
+)
+
+c_initial_inventory = (
+    v_raw_material_inventory
+    .filter(pl.col(TIMESTEP) == 1)
+    .rename({VAR:LHS, "initial_inventory":RHS})
+)
+
+c_raw_material_consumption = (
+    v_production_per_recipe
+    .with_columns(
+        custom_elementwize_series(
+            output_name=VAR+SCALED,
+            ordered_input=[VAR, "quantity"],
+            ordered_input_function=lambda v, w: w * v
+        )
+    )
+    .group_by(TIMESTEP, NAME, CONSUMED)
+    .agg(sum_variables(output_name=LHS, variable_name=VAR+SCALED))
+    .join(
+        v_transport
+        .drop(NAME).rename({TO_NODE:NAME, PRODUCT:CONSUMED})
+        .group_by(TIMESTEP, NAME, CONSUMED)
+        .agg(sum_variables(RHS)),
+        on = [TIMESTEP, NAME, CONSUMED],
+        how = "left"
+    )
+)
+
+c_product_flow = (
+    v_production_per_recipe
+    .select([TIMESTEP, NAME, PRODUCT, RECIPE, VAR]).unique()
+    .group_by([TIMESTEP, NAME, PRODUCT])
+    .agg(sum_variables(LHS))
+    .join(
+        v_transport
+        .drop(NAME).rename({FROM_NODE:NAME})
+        .group_by([TIMESTEP, NAME, PRODUCT])
+        .agg(sum_variables(RHS)),
+        on = [TIMESTEP, NAME, PRODUCT],
+        how = "left"
+    )
+)
+
+c_production_capacity = (
+    v_production_per_recipe
+    .select([TIMESTEP, NAME, RECIPE, VAR]).unique()
+    .group_by([TIMESTEP, NAME])
+    .agg(sum_variables(LHS))
+    .join(
+        df_industry_production.rename({"production_capacity":RHS}),
+        on = [TIMESTEP, NAME],
+        how = "left"
+    )
+)
+
+c_market_demand = (
+    df_market
+    .rename({DEMAND:RHS})
+    .join(
+        v_transport
+        .drop(NAME).rename({TO_NODE:NAME})
+        .group_by([TIMESTEP, NAME, PRODUCT])
+        .agg(sum_variables(LHS)),
+        on = [TIMESTEP, NAME, PRODUCT],
+        how = "left"
+    )
+)
+```
+</details>
+
+The first constraint **what gets produced must be transported away** is probably the simplest while
+the second **do not invent inventory** is probably the most complex.
+The first is basically saying that $produced = transported$
+The second is that $incoming - outgoing = current - previous$, that is, 
+if we are building inventory then we must have more incoming than outgoing.
+
+Once we have all constraint LHS and RHS defined, we can add them to the model:
+```python
+constraint_eq_lhs += c_raw_material_transport[LHS].to_list()
+constraint_eq_rhs += c_raw_material_transport[RHS].to_list()
+constraint_eq_lhs += c_raw_material_inventory_io[LHS].to_list()
+constraint_eq_rhs += c_raw_material_inventory_io[RHS].to_list()
+constraint_eq_lhs += c_initial_inventory[LHS].to_list()
+constraint_eq_rhs += c_initial_inventory[RHS].to_list()
+constraint_eq_lhs += c_raw_material_consumption[LHS].to_list()
+constraint_eq_rhs += c_raw_material_consumption[RHS].to_list()
+constraint_eq_lhs += c_product_flow[LHS].to_list()
+constraint_eq_rhs += c_product_flow[RHS].to_list()
+constraint_leq_lhs += c_production_capacity[LHS].to_list()
+constraint_leq_rhs += c_production_capacity[RHS].to_list()
+if market_demand_must_be_met:
+    constraint_eq_lhs += c_market_demand[LHS].to_list()
+    constraint_eq_rhs += c_market_demand[RHS].to_list()
+else:
+    constraint_leq_lhs += c_market_demand[LHS].to_list()
+    constraint_leq_rhs += c_market_demand[RHS].to_list()
+
+for lhs, rhs in zip(constraint_eq_lhs, constraint_eq_rhs):
+    model += lhs == rhs, str(lhs) + " == " + str(rhs)
+
+for lhs, rhs in zip(constraint_leq_lhs, constraint_leq_rhs):
+    model += lhs <= rhs, str(lhs) + " <= " + str(rhs)
+
+```
+
+Note that we made `market_demand_must_be_met` conditional.
+This is an example on how to make the logic easily configurable.
+With a boolean one can define if demand must be met exactly or if it is an upper bound.
+
+The last thing is to add an objective.
+This is done by summarizing all the costs and profits associated with the variables.
+It is all one great weighted sum:
+
+```python
+print(objective)
+- 20.41-R1-raw_material_1 - 20.42-R1-raw_material_1 - 20.43-R1-raw_material_1 - 16.91-R1-raw_material_2 - 16.92-R1-raw_material_2 - 16.93-R1-raw_material_2 - 22.11-R2-raw_material_1 - 22.12-R2-raw_material_1 - 22.13-R2-raw_material_1 - 17.21-R2-raw_material_2 - 17.22-R2-raw_material_2 - 17.23-R2-raw_material_2 - 38.21-R2-raw_material_3 - 38.22-R2-raw_material_3 - 38.23-R2-raw_material_3 - 12.51-R1-I1-raw_material_1 - 12.51-R1-I1-raw_material_2 - 12.52-R1-I1-raw_material_1 - 12.52-R1-I1-raw_material_2 - 12.53-R1-I1-raw_material_1 - 12.53-R1-I1-raw_material_2 - 16.11-R1-I2-raw_material_1 - 16.11-R1-I2-raw_material_2 - 16.11-R1-I2-raw_material_3 - 16.12-R1-I2-raw_material_1 - 16.12-R1-I2-raw_material_2 - 16.12-R1-I2-raw_material_3 - 16.13-R1-I2-raw_material_1 - 16.13-R1-I2-raw_material_2 - 16.13-R1-I2-raw_material_3 - 9.51-R2-I1-raw_material_1 - 9.51-R2-I1-raw_material_2 - 9.52-R2-I1-raw_material_1 - 9.52-R2-I1-raw_material_2 - 9.53-R2-I1-raw_material_1 - 9.53-R2-I1-raw_material_2 - 15.11-R2-I2-raw_material_1 - 15.11-R2-I2-raw_material_2 - 15.11-R2-I2-raw_material_3 - 15.12-R2-I2-raw_material_1 - 15.12-R2-I2-raw_material_2 - 15.12-R2-I2-raw_material_3 - 15.13-R2-I2-raw_material_1 - 15.13-R2-I2-raw_material_2 - 15.13-R2-I2-raw_material_3 - 9.01-I1-P1-raw_material_1 - 9.01-I1-P1-raw_material_2 - 9.01-I1-P1-raw_material_3 - 9.02-I1-P1-raw_material_1 - 9.02-I1-P1-raw_material_2 - 9.02-I1-P1-raw_material_3 - 9.03-I1-P1-raw_material_1 - 9.03-I1-P1-raw_material_2 - 9.03-I1-P1-raw_material_3 - 6.01-I2-P1-raw_material_1 - 6.01-I2-P1-raw_material_2 - 6.01-I2-P1-raw_material_3 - 6.02-I2-P1-raw_material_1 - 6.02-I2-P1-raw_material_2 - 6.02-I2-P1-raw_material_3 - 6.03-I2-P1-raw_material_1 - 6.03-I2-P1-raw_material_2 - 6.03-I2-P1-raw_material_3 - 15.01-R1-P1-raw_material_1 - 15.01-R1-P1-raw_material_2 - 15.01-R1-P1-raw_material_3 - 15.02-R1-P1-raw_material_1 - 15.02-R1-P1-raw_material_2 - 15.02-R1-P1-raw_material_3 - 15.03-R1-P1-raw_material_1 - 15.03-R1-P1-raw_material_2 - 15.03-R1-P1-raw_material_3 - 17.01-R2-P1-raw_material_1 - 17.01-R2-P1-raw_material_2 - 17.01-R2-P1-raw_material_3 - 17.02-R2-P1-raw_material_1 - 17.02-R2-P1-raw_material_2 - 17.02-R2-P1-raw_material_3 - 17.03-R2-P1-raw_material_1 - 17.03-R2-P1-raw_material_2 - 17.03-R2-P1-raw_material_3 + 100.01-P1-M1-product_1 + 85.01-P1-M1-product_2 + 100.02-P1-M1-product_1 + 85.02-P1-M1-product_2 + 100.03-P1-M1-product_1 + 85.03-P1-M1-product_2 - 2.51-I1-raw_material_1 - 2.52-I1-raw_material_1 - 2.53-I1-raw_material_1 - 2.51-I1-raw_material_2 - 2.52-I1-raw_material_2 - 2.53-I1-raw_material_2 - 3.11-I2-raw_material_1 - 3.12-I2-raw_material_1 - 3.13-I2-raw_material_1 - 3.11-I2-raw_material_2 - 3.12-I2-raw_material_2 - 3.13-I2-raw_material_2 - 3.11-I2-raw_material_3 - 3.12-I2-raw_material_3 - 3.13-I2-raw_material_3 
+```
+
+<details>
+  <summary>Expand to see the objective definition</summary>
+
+```python
+objective_cost_raw_material = mip.xsum(
+    v_raw_material_production
+     .with_columns(
+        custom_elementwize_series(
+            output_name=VAR+SCALED,
+            ordered_input=[VAR, "cost_per_unit"],
+            ordered_input_function=lambda v, w: w * v
+        )
+    )[VAR+SCALED]
+)
+
+objective_cost_transport = mip.xsum(
+    v_transport
+     .with_columns(
+        custom_elementwize_series(
+            output_name=VAR+SCALED,
+            ordered_input=[VAR, "cost_per_unit"],
+            ordered_input_function=lambda v, w: w * v
+        )
+    )[VAR+SCALED]
+)
+
+objective_cost_incoming_inventory = mip.xsum(
+    v_raw_material_inventory
+    .join(
+        v_transport
+        .drop(NAME).rename({TO_NODE:NAME})
+        .group_by([TIMESTEP, NAME, PRODUCT])
+        .agg(sum_variables("incoming")),
+        on = [TIMESTEP, NAME, PRODUCT],
+        how = "left"
+    )
+    .with_columns(
+        custom_elementwize_series(
+            output_name=VAR+SCALED,
+            ordered_input=["incoming", "cost_per_unit"],
+            ordered_input_function=lambda v, w: w * v
+        )
+    )[VAR+SCALED]
+)
+
+objective_cost_old_inventory = mip.xsum(
+    v_raw_material_inventory
+    .with_columns(
+        custom_elementwize_series(
+            output_name=VAR+SCALED,
+            ordered_input=[VAR, "cost_per_unit"],
+            ordered_input_function=lambda v, w: w * v
+        )
+    )[VAR+SCALED]
+)
+
+
+objective_gain_market = mip.xsum(
+    c_market_demand
+    .with_columns(
+        custom_elementwize_series(
+            output_name=VAR+SCALED,
+            ordered_input=[LHS, "price"],
+            ordered_input_function=lambda v, w: w * v
+        )
+    )[VAR+SCALED]
+)
+
+objective += -objective_cost_raw_material
+objective += -objective_cost_transport
+objective += -objective_cost_incoming_inventory
+objective += -objective_cost_old_inventory
+objective += objective_gain_market
+model.objective = objective
+```
+</details>
+
+With all this set up we can run the model as:
+
+```python
+model.max_gap = 0.05
+status = model.optimize(max_seconds=300)
+
+if status == mip.OptimizationStatus.OPTIMAL:
+    print(f'optimal solution cost {model.objective_value} found')
+
+elif status == mip.OptimizationStatus.FEASIBLE:
+    print(f'sol.cost {model.objective_value} found, best possible: {model.objective_bound}')
+
+elif status == mip.OptimizationStatus.NO_SOLUTION_FOUND:
+    print(f'no feasible solution found, lower bound is: {model.objective_bound}')
+
+if status == mip.OptimizationStatus.OPTIMAL or status == mip.OptimizationStatus.FEASIBLE:
+    print('solution:')
+    for v in model.vars:
+       if abs(v.x) > 1e-9: # only printing non-zeros
+          print(f'{v.name} : {v.x}')
+```
+
+In our example it comes out as 153588 arbitrary currency units.
+The model focuses all its power on product 2, recipe 3 and ships 1600 units a month.
+By modifying the data one can easily create scenarios.
+For example, what happens if we stop the production (`production_capacity = 0`) for $t = 2$?
+
+In this scenario the model is forced to store the production in inventory I1.
+Because the production capacity is not a limiting factor it can double the production in $t = 3$ to make up for total production,
+but, the extra cost from storing and handling 1 month of 1480 units has reduced the objective to 142338 currency units.
+
+Since this is a linear program we can also extract shadow prices using:
+```python
+df_constraint_shadow_prices = pl.DataFrame({
+    "name":[c.name for c in model.constrs], 
+    "shadow_price":[c.pi for c in model.constrs]
+}).sort("shadow_price")
+```
+The highest shadow price for this example is the availability of raw material 2. 
+It has a shadow price of 77.42 from R1 and 74.42 from R2.
+In contrast raw material 1 has 24.1 from R1 and 22.1 from R2. 
+Raw material 3 has 0.0 meaning that it is not a limiting resource for additional profits.
