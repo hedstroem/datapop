@@ -1,0 +1,183 @@
+---
+title: 'Particle filter as Bayesian filtering via sampling'
+description: 'Signal processing vibes'
+pubDate: 2025-09-08
+tags: ['signal-processing']
+---
+
+Particle filtering got *way* more intuitive to me when I found out it is Bayesian filtering via sampling... and how it is coded.
+Filtering allows us to estimate the true state of a system given noisy observations and a model of how the system operates.
+This is the type of signal processing vibes that appreciate.
+
+Particle filters are a sibling to Kalman filters, which work with Gaussian distributions and linear models.
+Kalman filters are incredibly powerful in their own right and it feels like an internal joke that no data scientists knows how to implement one.
+To be fair, closed-form solutions are neat (and efficient) but it takes time to meditate on their inteterpretation in code.
+Particle filters are what you bring out when distributions are non-Gaussian and the models non-linear.
+They trade computation for flexibility, something we can usually afford in modern systems.
+
+## Store supply example
+
+Image that you are have stock $S_t$ at time $t$.
+
+First of all, taking inventory takes time so you eyeball the quantity $X_t = S_t + Z_t$, where $Z_t$ is a noise distribution.
+For this example we can say that $Z_t \sim N(0, 5)$, meaning that you have an $\approx \pm 10$ uncertainty band (95% confidence interval) when taking inventory.
+This is the **only** measurement you can make in this example.
+
+Now, we are operating a store and stock leaves the store every single day $\Delta S_t$.
+For this example we can assume that we are working with whole number stock and the sales follow a Poisson distribution $\Delta S_t \sim \text{Poisson}(\lambda)$.
+As $\mathcal{E}(\Delta S_t) = \lambda$ we can set $\lambda = 5$ to make the expected number of sales to be 5 a day.
+
+Alright, we would eventually run out of stock if we were not restocking.
+Restocking is rare enough to be drawn from a Bernoulli distribution where $p_t = g(X_t) = max(0, 1 - \frac{X_t}{kr})$,
+where $r$ is the restock order size. To make it simple we know this, we always order one truck, say $r = 35$.
+$k$ is a hidden parameter which we for this example set as $k = 2$, meaning that daily restock probability $p_t = 50\%$ 
+when we have observed one weeks worth of stock.
+
+### Filtering goals
+
+Given that we can only observe $X_t$, what is $S_t$ likely to be?
+
+Given that we do not know $\lambda$ or how $p_t$ works, can we estimate them?
+
+### Particle filter - Step 0 - Initialize
+The $n_u$ particles $u_i$ will have three states $u_i = \{s_i, \lambda_i, p_i\}$.
+
+We initialize these with prior distributions $s_i \sim U(0, 100)$, $\lambda_i \sim U(3, 10)$ and $p_i \sim U(0.02, 0.2)$.
+For our model of the system we will assume that $\Delta S_t \sim \text{Poisson}(\lambda)$ but we do not know the dynamics of $p_t = g(X_t)$,
+instead we will assume that it can be fairly approximated using a static probability $\hat{p}$.
+
+The estimates for $\lambda$ and $\hat{p}$ are treated as latent variables because they are not observed directly.
+
+### Particle filter - Step 1 - Predict
+
+Given that we observe $X_t$ we start by predicting how each particle $u_i$ evolves.
+This is done by sampling demand $\Delta s_i \sim \text{Poisson}(p_i)$ and a restock event as $v_i \sim U(0,1)$.
+The complete update is then
+$$
+s_i^{new} = \begin{cases}
+s_i - \Delta S_i + r,\quad\;\text{if}\: v_i > p_i,\\
+s_i - \Delta S_i,\quad\quad\quad\text{if}\: v_i \leq p_i.\\
+\end{cases}
+$$
+
+### Particle filter - Step 2 - Weights from likelihood
+
+The next step of the particle filter is to calculate weight based on the likelihood of the particles' stock $s_i$.
+For Gaussian noise the likelihood is proportional $\mathcal{L}_i \sim L_i = e^{-\frac{1}{2}(\frac{X_t - s_i}{\sigma_{noise}})^2}$.
+The weight showing relative likelihood then becomes $w_i = \frac{L_i}{\sum_i L_i}$.
+Note that these calculations requires us to say something about the error distribution, similar to a generalized linear model (GLM).
+The error distribution could for example be exponential, Bernoulli, Poisson, Binomial depending on the nature of your problem.
+
+### Particle filter - Step 3 - Resample
+
+To focus the particles on the more likely region we draw them with replacement with probability $w_i$.
+
+### Particle filter - Step 4 - Estimation
+
+From this cloud of particles $u_i$ we can estimate the mean, median or best weighted particle to get point estimates for $S_t$, $\lambda$ and $\hat{p}$.
+We can also use the population statistics of the particles to calculate upper and lower quantile bands.
+
+## Code
+
+```python
+noise_mu = 0
+noise_sigma = 5
+sales_lam = 5
+weeks_of_stock = 2
+restock_size = sales_lam * 7
+
+n_days = 40
+dt = 1
+N = int(np.ceil(n_days / dt))
+t = dt * np.arange(N)
+starting_stock = weeks_of_stock * restock_size
+
+n_particles = 1000
+
+stock_prior = np.random.randint(0, 100, n_particles)
+sales_lam_prior = np.random.uniform(3, 10, n_particles)
+restock_p_prior = np.random.uniform(0.02, 0.2, n_particles)
+
+particles = np.zeros((n_particles, 3))
+STOCK_COL = 0
+SALES_LAM_COL = 1
+RESTOCK_P_COL = 2
+particles[:,STOCK_COL] = stock_prior
+particles[:,SALES_LAM_COL] = sales_lam_prior
+particles[:,RESTOCK_P_COL] = restock_p_prior
+
+stock = 1.0*starting_stock
+ground_truth = np.zeros(N)
+ground_truth[0] = stock
+observations = np.zeros(N)
+
+estimated_stocks = np.zeros(N)
+estimated_stocks_ci = np.zeros((N,2))
+estimated_sales_lams = np.zeros(N)
+estimated_sales_lams_ci = np.zeros((N,2))
+estimated_restock_ps = np.zeros(N)
+estimated_restock_ps_ci = np.zeros((N,2))
+
+np.random.seed(5)
+true_restocks = 0
+for i in range(N):
+    t_sim = i*dt # not used
+
+    # System evolution
+    demand = np.random.poisson(sales_lam)
+    stock = max(stock - demand, 0)
+    internally_observed_stock = stock + (noise_mu + noise_sigma*np.random.randn())
+    restock_p = max(0, 1 - internally_observed_stock / (weeks_of_stock * restock_size))
+    if restock_p > np.random.rand():
+        true_restocks += 1
+        stock += restock_size
+    observed_stock = stock + (noise_mu + noise_sigma*np.random.randn())
+    ground_truth[i] = stock
+    observations[i] = observed_stock
+
+    # Particle
+    # 1. Prediction
+    demand = np.random.poisson(particles[:,SALES_LAM_COL])
+    particles[:, STOCK_COL] = np.maximum(particles[:, STOCK_COL] - demand, 0)
+    predicted_restock = particles[:,RESTOCK_P_COL] > np.random.rand(n_particles)
+    particles[:, STOCK_COL] += restock_size*predicted_restock
+
+    # 2. Update likelihood
+    likelihood = np.exp(-1/2 * ((observed_stock - particles[:, STOCK_COL]) / noise_sigma)**2)
+    weights = likelihood / np.sum(likelihood)
+
+    # 3. Resample
+    resample_indices = np.random.choice(range(n_particles), size=n_particles, p=weights)
+    particles = particles[resample_indices]
+
+    # 4. Estimates
+    alpha = 0.05
+    estimated_stocks[i] = np.mean(particles[:,STOCK_COL])
+    estimated_stocks_ci[i,0] = np.percentile(particles[:,STOCK_COL], alpha/2)
+    estimated_stocks_ci[i,1] = np.percentile(particles[:,STOCK_COL], 100-alpha/2)
+    estimated_sales_lams[i] = np.mean(particles[:,SALES_LAM_COL])
+    estimated_sales_lams_ci[i,0] = np.percentile(particles[:,SALES_LAM_COL], alpha/2)
+    estimated_sales_lams_ci[i,1] = np.percentile(particles[:,SALES_LAM_COL], 100-alpha/2)
+    estimated_restock_ps[i] = np.mean(particles[:,RESTOCK_P_COL])
+    estimated_restock_ps_ci[i,0] = np.percentile(particles[:,RESTOCK_P_COL], alpha/2)
+    estimated_restock_ps_ci[i,1] = np.percentile(particles[:,RESTOCK_P_COL], 100-alpha/2)
+```
+
+Running this code yields the following example:
+
+![...](/images/particles/particles_1.png)
+
+The average of $s_i$ tracks the ground truth pretty well.
+
+The parameter estimations are a bit stiffer but their confidence bands are converging over time:
+
+![...](/images/particles/particles_2.png)
+
+![...](/images/particles/particles_3.png)
+
+One thing to note that our code does not allow the particle latent variables to take on new values.
+This is entirely possible by adding some random noise, interpolations between multiple particle or throwing in a genetic element.
+With real data there is never going to be stable parameters, there we usually settle for long-term averages (which $\hat{p}$ is) or some seasonality.
+We did not add it here but it would make sense that there is a weekly, monthly and/or yearly seasonality to demand.
+
+Using particle filters one can fit, for example, stochastic differential equations.
