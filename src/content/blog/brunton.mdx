@@ -1,0 +1,155 @@
+---
+title: 'Chaos as an intermittently forced linear system'
+description: 'Steve Brunton <3'
+pubDate: 2025-09-11
+tags: ['machine-learning', 'system-identification']
+---
+
+A few years ago I encountered [this article](https://arxiv.org/pdf/1608.05306) by Brunton et. al. which brought an interesting perspective to time series modeling.
+At the time I was working with how to create effective time series features for regression models (linear regression, random forest, multilayer perceptron).
+The type of features included but where not limited to:
+* Moving averages (MA) and exponential moving averages (EMA)
+* Moving variance / standard deviation
+* Windowed binning
+* Rolling autocorrelation at different lags
+* Batched fast Fourier transform (FFT)
+* [Sliding discrete Fourier transform (DFT)](https://quod.lib.umich.edu/cgi/p/pod/dod-idx/sliding-is-smoother-than-jumping.pdf?c=icmc;idno=bbp2372.2005.086;format=pdf)
+* Wavelet decomposition using filter banks
+* Training convolutional neural networks (CNN) and taking their filters
+
+What was interesting about the article was that they were using singular value decomposition (SVD) to extract signal modes
+and they studied how models of those can, for example, reconstruct latent attractors.
+Using SVD is a good idea; to create features of orthogonal reoccuring modes.
+The latent attractors were also highly interesting and seemed like a powerful tool for system identification.
+
+
+
+## Hankel alternative view of Koopman - HAVOK
+
+Start by picking a window size $w$. Take your time series $y_t, t = 0, 1, ..., N-1$ and organize it in a Henkel matrix $H(y_t, w)$.
+A Henkel matrix is of shape $(N - w) \times w$ where the first row contains $y_0$ to $y_{w-1}$. 
+
+Doing a SVD on $H = U \Sigma V^T$ yields modes $V$ and their variances $\Sigma$.
+
+To contextualize this decomposition we exemplify using the Lorentz attactor as in the article.
+
+![...](/images/brunton/brunton_1.png)
+
+Now, having all three signals $x$, $y$ and $z$ would be too easy so the authors settle with only knowing $x$.
+
+![...](/images/brunton/brunton_2.png)
+
+Not that the sign of $x$ and $y$ tell which lobe we are currently in.
+To highlight this we colored the "butterfly" using with a rainbow conditional on $x$.
+One lobe has a red ear ($x > 0$) and the other a blue ear ($x < 0$).
+Arranging $x$ in a Henkel matrix and taking the SVD yields $U, \Sigma$ and $V$.
+By dividing the cumulative sum of $\Sigma$ by the sum of $\Sigma$ we get the cumulative share of variance explained,
+similar to we look at in a PCA. For this example we are interested when we have explained 99.9% of the variance 
+(another way of saying it is that we leave 0.1% variance).
+
+For $w = 32$ we get that $n_{features} = 6$ modes explains 99.9% of the variance:
+![...](/images/brunton/brunton_3.png)
+
+And for $w = 100$ the corresponding number is $n_{features} = 16$:
+![...](/images/brunton/brunton_4.png)
+
+It is easier to get an overview of 6 rather than 16 modes so for this example we will continue with that.
+The modes are visualized as weights over the window size $w$:
+![...](/images/brunton/brunton_5.png)
+
+And how those modes are weighted over time by $U$ for mode $i$ as $u_i(t)$ to compose $x$ can be seen below:
+![...](/images/brunton/brunton_6.png)
+
+There is like a dance of harmonic modes, which is part of the appeal of the approach.
+Using the first 3 modes $u_0, u_1$ and $u_2$ in a 3D plot one can reconstruct the attractor.
+So without direct access to $y$ and $z$ one can still deduce that there are probably two poles of attraction.
+![...](/images/brunton/brunton_7.png)
+
+Harmonic problems of this nature are typically a more friendly environment for linear models like $\frac{du}{dt}(u) = A u(t)$.
+However, the authors propose to add an unknown forcing term, which in this case would be $u_i(t)$ indexed outside of the feature set $i = n_{features}$ ($n_f$ for short).
+This modifies the model as $\frac{du}{dt}(u) = A u(t) + B u_{n_{f}} (t)$.
+
+The authors motivate that $u_{n_{f}}$ can act as a forcing term with a non-Gaussian distribution. 
+Its amplitudes seem to correspond to lobe changes as one can see by looking at the power $\|u_{n_{f}}\|^2$ in the graph below.
+![...](/images/brunton/brunton_8.png)
+
+I wonder if this is analogous to appoximating a sharp edge using sine waves.
+Higher and higher frequencies are needed to resolve the sharpness.
+We will see.
+For now lets focus on the modeling.
+Fitting a sparse linear model yields the weights visualized in the heatmap below.
+Like in the article there is a clear dominance on the off-diagonals.
+Also note that the forcing is primarily impacting the last $\frac{du_{n_f-1}}{dt}$.
+![...](/images/brunton/brunton_9.png)
+
+This particular model has a coefficient of explaination of $R^2 = 0.996$.
+
+## Noisy view of the problem
+
+The insights from this method are cool. We have:
+* Linearlized $x$ using mode decomposition
+* Discovered that there is a probable two-pole attractor
+* Identified a signal for incoming lobe changes
+
+The question is how well those insights work when we are dealing with real data.
+One way to build an intuition is to add noise to the Lorentz attractor $x' = x + Z, Z \sim \mathcal{N}(0,1)$.
+How will the methodology handle it?
+
+First of all, our 99.9% explained variance way of selecting $n_f$ will not work.
+White noise can not be decomposed by the SVD so it will show up in all modes.
+There are [articles](https://arxiv.org/abs/1305.5870) for optimal thresholds for filtering $\Sigma$.
+Since we know $\sigma_{noise} = 1$ we can use the formula $\tau_* = \lambda_*(\beta) \sqrt{n} \sigma_{noise},\:\beta = \frac{N-w}{w}$ where
+$\lambda_*(\beta)$ is a shape parameter that depends on $\beta$.
+$\tau_* \rightarrow n_f = 4$ for $w = 32$ and $\tau_* \rightarrow n_f = 9$ for $w = 100$.
+This is the regime where $Z$ begins to dominate in size over the dynamics encoded in $x$.
+You can observe this by noting that $u_0(t)$ is relatively smooth and $u_3(t)$ carries noise in the decomposition below:
+
+![...](/images/brunton/brunton_10.png)
+
+Because the first modes have strong signal-to-noise ratio (SNR) one can still observe the latent attractor:
+
+![...](/images/brunton/brunton_11.png)
+
+However, this is where our luck "ends".
+We know from the pure Lorentz attractor that we needed $n_f = 6$ to capture 99.9% of the signal modes.
+Effectively we have lost two modes ($w = 32$) due to noise.
+Also, the assumed forcing term $u_{n_{f}}$ will by this definition also be dominated by noise.
+
+![...](/images/brunton/brunton_12.png)
+
+There is still some correlation but it is not as clean as the previous example.
+The performance of the model also drops to an $R^2 = 0.76$.
+The coefficients show the same behavior with the alternating off-diagonals:
+
+![...](/images/brunton/brunton_13.png)
+
+This means that the linearlization and attractor discovery still works okay.
+The signal for quantifying forcing has lost some utility but perhaps there are ways of altering the method.
+
+## Altered HAVOK?
+
+We know that the answer lies within the $\geq n_f$ modes.
+Instead of just using $u_{n_f}$ we could try to condense $u_{n_f}, u_{n_f+1}, ..., u_{w}$ into one signal.
+One naive way of doing it would be to sum up their powers $\alpha = \sum_{i = n_f}^w \|u_i\|^2$.
+The answer to that is no, no amount of threshold calibration will save that signal.
+![...](/images/brunton/brunton_14.png)
+
+The second idea $\alpha = \|\sum_{i = n_f}^w u_i\|^2$ also does not work.
+![...](/images/brunton/brunton_15.png)
+
+Another idea is to train a neural network $f$ as a jointly with the linear model to automatically pick up on anything
+$\frac{du}{dt}(u) = A u(t) + B f(u_{n_{f}} (t), u_{n_{f}+1} (t), ..., u_{w} (t))$. 
+However, after testing the idea we found that the forcing term that the neural net can cook up freely is not included in the sparse linear $B$.
+![...](/images/brunton/brunton_16.png)
+
+Hindsight is 20/20 and one probably should have started by just including all potential forcing features.
+![...](/images/brunton/brunton_17.png)
+
+The model improves $R^2 = 0.85$ but now the forcing term is distributed.
+Weighting all the forcing terms together using the corresponding coefficients yields a signal which unfortunately does not do the job.
+![...](/images/brunton/brunton_18.png)
+
+From this I have deduced that there is likely no good instantaneous estimator for the forcing term.
+Instead it would have to be filtered over time.
+Detecting forcing in a system would be a wonderful vector of analysis if achievable.
+However it is unlikely that good general methods exist.
