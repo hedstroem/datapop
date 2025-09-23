@@ -1,0 +1,357 @@
+---
+title: 'Anomaly detection'
+description: 'Methods for outlier identification'
+pubDate: 2025-09-23
+tags: ['statistics', 'machine-learning']
+---
+
+import ImageGallery from '../../components/ImageGallery.astro';
+
+Anomaly detection is the art of scoring observations $x$ by how anomalous they are.
+The definition is that anomalies or outliers do not follow the distribution of the rest of the data.
+See two univariate examples of anomalies below.
+
+![...](/images/anomaly/anomaly_1.png)
+
+The first is the type most people think of (for example, detecting abnormally high pressures or temperatures) but one has to remember that the second one is equally anomalous.
+This becomes clearer in a multivariate setting where anomalies can be a mix of inside and outside the data range.
+
+![...](/images/anomaly/anomaly_2.png)
+
+Anomaly 0 matches the anomaly *outside* univariate example while anomaly 2 matches anomaly *inside* on the axis between bimodal distributions.
+Anomaly 1 and 3 will not show up as anomalous until one considers the correlation that the bimodal distribution has.
+
+In higher dimensions there are more and more combinations of "dead space" where anomalies can appear.
+Generally one want to reduce the problem space to as few dimensions as possible.
+
+## Anomaly detection on a single big blob by distribution fitting
+
+If one is lucky enough to have a *single big blob distribution* (SBBD) then anomaly detection can be done robustly by fitting
+a probablity distribution that allows one to score the likelihood of incoming observations.
+The most commonly used distribution is the Gaussian.
+It occurs in a lot of places due to the law of large numbers and even if it does not perfectly fit the data it is still good-enough for a lot of purposes.
+
+Actually, when working with the Gaussian one does not even bother with likelihood as the z-score has an intuitive interpretation.
+The z-score is the standardized observation $z = \frac{x - \mu}{\sigma}$, where $\mu$ is the mean and $\sigma$ the standard deviation.
+Both of these parameters can be efficiently estimated from samples $\mu_s, \sigma_s$.
+A deviation of $\pm 1$ z-score means that the observation is one standard deviation away.
+One typically thresholds the z-score $|z| < \tau_z, \tau_z > 3$.
+This is because at 4 standard deviations you only expect 0.006% of the data to fall outside of that interval during normal circumstances.
+
+Here are the z-scores for the anomaly *outside* example after 100 observations of calibration of $\mu_s, \sigma_s$.
+
+![...](/images/anomaly/anomaly_3.png)
+
+And for the anomaly *inside* example:
+
+![...](/images/anomaly/anomaly_4.png)
+
+The Gaussian is a reliable workhorse and great for anomaly detection for SBBD.
+Its most critical quality for anomaly detection is how it tapers off.
+The likelihood of an observation $p_{\mathcal{N}}(x | \mu, \sigma) = \frac{1}{\sqrt{2 \pi \sigma^2}} e^{-\frac{(x-\mu)^2}{\sigma^2}}$ decays as $e^{-z^2}$.
+This means that Gaussian assumes that the observations do not come from a fat tailed distribution.
+
+... but what if they are?
+
+This has always bothered me, so let's try something!
+Two fat-tailed distributions come to mind, the Laplace distribution and the Cauchy distribution.
+Laplace tapers off as $e^{-|z|}$ and Cauchy as $\frac{1}{z^2}$.
+Out of these two one prefers to work with the Laplace distribution because the Cauchy distribution is pathological.
+This means that there is no "exact" estimators for its parameters.
+
+The likelihood of the Laplace distribution is 
+$p_{\mathcal{L}}(x | \mu, b) = \frac{1}{2b} e^{-\frac{|x - \mu|}{b}},$
+where one typically fits $\mu$ using the median and the scale parameter $b$ as $\hat{b} = \frac{1}{n}\sum |x_i - \hat{\mu}|$.
+Instead of directly comparing likelihoods $p_{\mathcal{N}}$ to $p_{\mathcal{L}}$ we typically use the log-likelihoods $log\:p_{\mathcal{N}}$ and $log\:p_{\mathcal{L}}$.
+The joint probablility of a sequence of observations becomes a sum of log likelihoods, which is easier computationally.
+
+If one wants a zero-centered process then one can work with the centered log-likelihood (CLL), which is $log\:p_{X}(x) - \mathbb{E}(log\:p_{X}(x))$.
+This means that we are correcting for the amount of log-likelihood we expect to see.
+By definition this is just the negative entropy $H_X = -\mathbb{E}(log\:p_{X})$ so
+$\text{CLL}_X = log\:p_X + H_X$.
+
+For a Gaussian distribution we have
+$$
+\begin{align*}
+log\:p_{\mathcal{N}}(x,\mu,\sigma) &= -\frac{1}{2} log(2 \pi \sigma^2) - \frac{1}{2}\bigg(\frac{x - \mu}{\sigma}\bigg)^2,\\
+H_{\mathcal{N}}(\mu,\sigma) &= \frac{1}{2} log(2 \pi \sigma^2) +  \frac{1}{2},\\
+\text{CLL}_\mathcal{N}(x,\mu,\sigma) &= - \frac{1}{2}\bigg(\frac{x - \mu}{\sigma}\bigg)^2 + \frac{1}{2},
+\end{align*}
+$$
+and for a Laplace distribution
+$$
+\begin{align*}
+log\:p_{\mathcal{L}}(x,\mu, b) &= -log(2 b) - \frac{|x - \mu|}{b},\\
+H_{\mathcal{L}}(\mu, b) &= log(2 b) + 1,\\
+\text{CLL}_\mathcal{L}(x,\mu, b) &= - \frac{|x - \mu|}{b} + 1.
+\end{align*}
+$$
+
+With the $log\:p_{X}$ we can determine if a Gaussian or Laplace distribution is more appropriate on some non-calibration data.
+If $\sum log\:p_{L}(x, \mu_s, b_s) > \sum log\:p_{\mathcal{N}}(x,\mu_s,\sigma_s)$ then the Laplace distribution assumption dominates.
+
+For our anomaly *outside* example before the $\sum log\:p_{\mathcal{N}}(x,\mu_s,\sigma_s) \approx -579.3$ and $\sum log\:p_{L}(x, \mu_s, b_s) \approx -612.6$,
+meaning that is it more likely Gaussian than Laplace, which is what we simulated the problem using. 
+If we simulate a version of the same problem using a Laplace distribution we get a problem that looks something like this:
+![...](/images/anomaly/anomaly_5.png)
+
+Note that in the calibration window there is an observation $x > 10$ which is not anomalous.
+This is the fat-tailed nature of Laplace distributions examplified.
+For this problem the $\sum log\:p_{\mathcal{N}}(x,\mu_s,\sigma_s) \approx -788.9$ and $\sum log\:p_{L}(x, \mu_s, b_s) \approx -725.3$,
+meaning that the Laplace distribution assumption dominates.
+
+So what is the consequence on the outlier status? For the anomaly *outside (Laplace distribution)* example the anomaly has 
+$p_\mathcal{L} = 1.23 \cdot 10^{-7}$, $p_\mathcal{N} = 1.14 \cdot 10^{-20}$, 
+$LL_\mathcal{L} = -15.9$, $LL_\mathcal{N} =-45.9$.
+For $\mathcal{L}$ the probablility of such an observation is about 1 in 10 million while for $\mathcal{N}$ it is an improbable observation.
+To contextualize; the rare observation $x \approx 10$ at index 24 has 
+$p_\mathcal{L} = 1.38 \cdot 10^{-5}$, $p_\mathcal{N} = 1.56 \cdot 10^{-10}$, 
+$LL_\mathcal{L} = -11.2$, $LL_\mathcal{N} =-22.6$.
+
+A 1 in 100000 is still a rare event to probably want to be flagged as an outlier.
+Especially when another rare event happens relatively soon afterward.
+By keeping a rolling sum or average in a window one can gauge how likely a sequence of observations are.
+This type of methodology looks for clustered anomalies or even change instead of single anomalies.
+
+## Anomaly detection using histograms
+
+The method described above will not work for the anomaly *inside* example because its anomaly is not an extreme value.
+Another staple is to model the distribution using a histogram and use that for anomaly scoring or change detection.
+By building up the histograms over a calibration window we can use it to score incoming observations.
+
+Defining an anomaly in this context could be something as *something that does not fit into one of the bins*.
+An example of this can be seen below.
+Note that this method also captures outliers in bins $x \sim 2$ and $x \sim 7$.
+Bootstrapping with noise can somewhat mitigate it but it is generally a problem with histogram based methods.
+
+![...](/images/anomaly/anomaly_6.png)
+
+Of course, one can always modify the distribution like smoothing it with a Gaussian kernel.
+This can be set up so that $1\:\sigma = 1\:\text{bin}$.
+That works fairly well for this example because $x \sim 2$ and $x \sim 7$ are close to bins with observations
+but $x \sim 5$ is to far away that the smoothed frequency $\approx 0$.
+
+![...](/images/anomaly/anomaly_7.png)
+
+Another problem with histogram based methods is that they become harder to construct in higher dimensions.
+Uniform grid sizes makes the number of bins explode and it is not feasible for most real world problems.
+
+## Anomaly detection using other machine learning methods
+
+### Isolation forests
+
+[Isolation forests](https://www.lamda.nju.edu.cn/publication/icdm08b.pdf) are a classical example of anomaly detection.
+During training each tree gets a random subset of data and randomly splits it along random features (that's a lot of randomness).
+The core idea of the anomaly detection is based on how long it takes to isolate the data point.
+The theory is based on binary search trees (BST) where the average path length of an unsuccessful search is
+$$
+c(n) = 2 H(n-1) - 2(\frac{n-1}{n}),
+$$
+where $n$ is the dataset size and $H(i)$ is the harmonic number, 
+which can be estimated using Eulers constant $\gamma$ as $H(i) \approx log(i) + \gamma, \gamma = 0.5772...$ 
+This they use to construct the anomaly score as $s(x, n) = 2^{-\frac{E(h(x))}{c(n)}},$ 
+where $E(h(x))$ is the average of path lengths $h(x)$ from a collection of isolation trees.
+
+Using the scikit-learn implementation of isolation forests yields the following decision function (before thresholding).
+Note that most points around the Gaussian modes are outlier-esque and there is no additional penalty for $x \sim 5$.
+
+![...](/images/anomaly/anomaly_8.png)
+
+For this type problem it seems to be the way isolation forests scores anomalies.
+To verify this we generate the same example but with Laplace distributions instead of Gaussians.
+Note once more the banded nature of the decision function.
+There are no more hyperparameters to configure to better model our true distribution.
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/anomaly/anomaly_9.png",
+      alt: "...",
+      caption: "Anomaly *inside* but with Laplace distributions instead of Gaussian"
+    },
+    {
+      src: "/images/anomaly/anomaly_10.png",
+      alt: "...",
+      caption: "Isolation Forest decision function"
+    },
+  ]}
+  layout="carousel"
+/>
+
+### One-class support vector machines
+
+One-class support vector machines (SVM) transform data into a higher-dimensional space 
+and finding the smallest region that encloses most of the data (up to some slack variable).
+For a radial basis function (RBF) the transformation is $e^{-\epsilon\|x - x_b\|_2^2}$,
+where $\epsilon$ is the inverse variance (for kernel scaling) and $x_b$ is the "basis",
+a reference data point or a support vector.
+During training an optimizer finds support vectors that are used to define a (hyper)margin.
+Distance to this margin is what is used for the decision function.
+
+![...](/images/anomaly/anomaly_11.png)
+
+Similarly to isolation forests this mainly leads to a banded decision function.
+
+### Local outlier factor
+
+In a nutshell, local outlier factor (LOF) looks at the local density of the $n$ nearest neighbors.
+A point is more likely to be anomalous if its nearest neighbors are further away than normal data points.
+This works well for our example as we get less banding and more focus on local phenomena,
+note that $x \sim 5$ stands out clear with no neighbors.
+
+![...](/images/anomaly/anomaly_12.png)
+
+The downside of LOF is that nearest neighbor methods are slow on big datasets.
+It also does not handle clustered outliers well as clusters means neighbors.
+So the definition makes it appropriate for some scenarios but not for all.
+
+### Clustering by K-means
+
+Alternative methods for anomaly detection can be clustering the data 
+and using *distance from nearest cluster* or *isolated clusters* as a heuristic for anomalous observations.
+Methods such as K-means does this well for Euclidean distances and can be adapted
+to work with streaming data.
+
+This methodology is the most (visually) intuitive in 2D:
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/anomaly/anomaly_13.png",
+      alt: "...",
+      caption: "Centroids (n = 64) for K-means. Calibration size: 200"
+    },
+    {
+      src: "/images/anomaly/anomaly_14.png",
+      alt: "...",
+      caption: "Distance to closest centroid"
+    },
+  ]}
+  layout="carousel"
+/>
+
+And the result for anomaly *inside* example (we plot the centroids at the end of the calibration window):
+![...](/images/anomaly/anomaly_15.png)
+
+This method essentially constructs a histogram of [Voronoi](https://en.wikipedia.org/wiki/Voronoi_diagram) regions.
+
+## The biggest hurdle
+
+*What is normal?*
+
+Clustering by K-means yields is our best method yet but lets break it!
+Adding noise dimensions breaks the analysis because the clustering will focus on compressing uncompressible noise.
+In the example below we have added 30 noise Gaussians $u_i \sim N(0, 10)$:
+
+![...](/images/anomaly/anomaly_16.png)
+
+The centroids no longer capture any structure in the first two dimensions.
+This yields our anomaly detection useless as we are no longer accurately representing what we care about the data.
+What we just did is an extreme example but it hints at something that one has to be aware of with real-world data.
+
+In a nutshell; data is noisy and correlations are weak.
+Another thing is that most outliers are simply extreme values, which are easier to detect than distribution deviations.
+In the literature people talk about carefully selecting signals, transforming them with PCA to compress correlations
+and looking for high-kurtosis features when enabling anomaly detection. No free lunch.
+
+### Sparse K-means
+
+Of course people have thought about ways of adressing this.
+By weighting the distance contribution for each dimension one could in theory get a clustering that partially ignores noise.
+The distance between an observation $x$ and the centroid $c$ with corresponding weights $w$ can be written as $w\|x-c\|_2^2 = \sum_d w_d(x_d - c_d)^2$,
+where $d$ is the number of dimensions. We do reserve for the fact that one can have other distances than Euclidean, for example Manhattan, cosine or others more suitable for categorial variables.
+
+Sparse K-means can iteratively be solved as:
+* Initialize $w$ uniformly.
+* Standardize data $z = \frac{x - \mu_s}{\sigma_s}$ using sample mean $\mu_s$ and standard deviation $\sigma_s$.
+* Initialize centroids $c$ randomly, using random data points or using standard K-means.
+* For each iteration to converge the centroids:
+  * Calculate $d_c = w\|z-c\|_2^2$.
+  * Select minimum distance for each data points as cluster label.
+  * Update centroids as the average of all assigned data points.
+  * **This is where regular K-means ends**.
+  * Calculate the cluster sum of squares per dimension $B = \frac{1}{N} \sum_c \big(|z \in c| \cdot c^2\big)$.
+  * Calculate soft-threshold per dimension as $\tau_d = max(0, B_d - \lambda)$.
+  * Calculate new weights per dimension as $w_d = \frac{\tau_d}{\sum_d \tau_d}$.
+
+So what happened here?
+$B$ is a sum of the squared centroids, weighted by the number of points belonging to that centroid.
+Since we are working with standardized data and if a dimension is uncorrelated noise, then $\mathbb{E}(c_d) = 0$.
+If this is experienced across all centroids then there is no signal in how the clusters are treating $d$.
+So one iterpretation is that $B_d$ is the cluster signal-to-noise ratio (SNR) for dimension $d$.
+$\lambda$ is our penalty which encourages sparsity by pruning low SNR.
+For the same example with above, $\lambda = 0.5$ yields:
+
+![...](/images/anomaly/anomaly_17.png)
+
+With $w_0 \approx 0.5$ and $w_1 \approx 0.5$ while the rest $w_i = 0$.
+
+### Angular K-means to capture the cluster boundaries
+
+Using sparse K-means one could reasonably track the density of data distribution.
+One could be interested in knowing the cluster boundaries.
+To do so one takes the established centroids $c$ and their corresponding data points $x_c$.
+For each centroid:
+* Calculate weighted directions $u_c = \frac{(x_c - c)}{\|(x_c - c)\|} \frac{w}{\|w\|}$.
+* Cluster $u_c$ using K-means to get angular centroids $c_{ang}$.
+* For each angular centroid $c_{ang}$:
+  * Take directions $u_c^a$ belonging to $c_{ang}$.
+  * Calculate projections $p_c^a = (\frac{w}{\|w\|} (u_c^a - c)) \cdot \frac{c_{ang}}{\|c_{ang}\|}$.
+  * Take $x_c$ with the highest projection to be this directions furthest representative.
+
+Here are a few examples of what it can look like:
+<ImageGallery 
+  images={[
+    {
+      src: "/images/anomaly/anomaly_18.png",
+      alt: "...",
+      caption: "n(clusters) = 2 with n(directions) = 12. Calibration size: 200"
+    },
+    {
+      src: "/images/anomaly/anomaly_19.png",
+      alt: "...",
+      caption: "n(clusters) = 6 with n(directions) = 12. Calibration size: 200"
+    },
+    {
+      src: "/images/anomaly/anomaly_20.png",
+      alt: "...",
+      caption: "n(clusters) = 12 with n(directions) = 12. Calibration size: 200"
+    },
+    {
+      src: "/images/anomaly/anomaly_21.png",
+      alt: "...",
+      caption: "n(clusters) = 12 with n(directions) = 6. Calibration size: 200"
+    },
+  ]}
+  layout="carousel"
+/>
+
+In theory, if the boundaries are good then one could figure out which clusters border each other:
+
+![...](/images/anomaly/anomaly_22.png)
+
+Figuring out how to combine the boundary points is not a trivial task.
+The simplest approach is to rerun the angular clustering to calculate the points from the joined clusters.
+Also note, because this is a 2D problem we get these nice lines between the border points.
+In higher dimensions the lines becomes surfaces for 3D, volumes for 4D e.t.c.
+Long story short, we use the border points and not the lines.
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/anomaly/anomaly_23.png",
+      alt: "...",
+      caption: "n(clusters) = 5 with n(directions) = 12. Calibration size: 200"
+    },
+    {
+      src: "/images/anomaly/anomaly_24.png",
+      alt: "...",
+      caption: "n(clusters) = 10 with n(directions) = 8. Calibration size: 200"
+    },
+  ]}
+  layout="carousel"
+/>
+
+Here is an example of anomalies found approximately 20% outside of the boundary:
+
+![...](/images/anomaly/anomaly_25.png)
