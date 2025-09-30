@@ -52,6 +52,9 @@
         "image": {
           "type": "string"
         },
+        "readingTime": {
+          "type": "number"
+        },
         "$schema": {
           "type": "string"
         }

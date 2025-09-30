@@ -8,10 +8,10 @@ export interface Props {
   pubDate: Date;
   updatedDate?: Date;
   tags?: string[];
+  readingTime?: number;
 }
 
-const { title, description, pubDate, updatedDate, tags = [] } = Astro.props;
-const readingTime = Math.ceil(Astro.slots.has('default') ? 5 : 1);
+const { title, description, pubDate, updatedDate, tags = [], readingTime } = Astro.props;
 ---
 
 <Layout title={title} description={description}>
@@ -25,10 +25,12 @@ const readingTime = Math.ceil(Astro.slots.has('default') ? 5 : 1);
             {pubDate.toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' })}
           </time>
         </div>
-        <div class="flex items-center gap-1">
-          <Clock className="w-4 h-4" />
-          <span>{readingTime} min read</span>
-        </div>
+        {readingTime && (
+          <div class="flex items-center gap-1">
+            <Clock className="w-4 h-4" />
+            <span>{readingTime} min read</span>
+          </div>
+        )}
       </div>
       {tags.length > 0 && (
         <div class="flex gap-2 mt-4">

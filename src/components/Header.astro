@@ -1,5 +1,5 @@
 ﻿---
-import { BookOpen, Sun, Moon, Grid3x3, Square } from 'lucide-react';
+import { BookOpen, Sun, Moon, Square, Circle, Grip, Dot } from 'lucide-react';
 ---
 
 <header class="fixed top-0 left-0 right-0 z-40 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/10 backdrop-blur-md">
@@ -10,23 +10,31 @@ import { BookOpen, Sun, Moon, Grid3x3, Square } from 'lucide-react';
       </a>
       <div class="flex items-center gap-4">
         <a href="/blog" class="flex items-center gap-2 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">
-          <span class="sm:inline">Archive</span>
+          <span class="sm:inline font-display font-thin">Archive</span>
         </a>
         <button
           id="texture-toggle"
           class="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
           aria-label="Toggle texture"
         >
-          <Grid3x3 className="w-4 h-4 texture-on" />
-          <Square className="w-4 h-4 texture-off hidden" />
+          <Grip className="w-4 h-4 texture-on" />
+          <Dot className="w-4 h-4 texture-off hidden" />
+        </button>
+        <button
+          id="rounded-toggle"
+          class="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+          aria-label="Toggle rounded corners"
+        >
+          <Circle className="w-4 h-4 rounded-on" />
+          <Square className="w-4 h-4 rounded-off hidden" />
         </button>
         <button
           id="theme-toggle"
           class="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
           aria-label="Toggle theme"
         >
-          <Sun className="w-4 h-4 dark:hidden" />
-          <Moon className="w-4 h-4 hidden dark:block" />
+          <Sun className="w-5 h-5 dark:hidden" />
+          <Moon className="w-5 h-5 hidden dark:block" />
         </button>
       </div>
     </div>
@@ -67,6 +75,24 @@ import { BookOpen, Sun, Moon, Grid3x3, Square } from 'lucide-react';
     textureOn?.classList.toggle('hidden', isEnabled);
     textureOff?.classList.toggle('hidden', !isEnabled);
     localStorage.setItem('texture', !isEnabled ? 'true' : 'false');
+  });
+
+  // Rounded corners toggle
+  const roundedToggle = document.getElementById('rounded-toggle');
+  const roundedOn = roundedToggle?.querySelector('.rounded-on');
+  const roundedOff = roundedToggle?.querySelector('.rounded-off');
+
+  // Check for saved rounded preference or default to on
+  const roundedEnabled = localStorage.getItem('rounded') !== 'false';
+  html.classList.toggle('no-rounded', !roundedEnabled);
+  roundedOn?.classList.toggle('hidden', !roundedEnabled);
+  roundedOff?.classList.toggle('hidden', roundedEnabled);
+
+  roundedToggle?.addEventListener('click', () => {
+    const isEnabled = html.classList.toggle('no-rounded');
+    roundedOn?.classList.toggle('hidden', isEnabled);
+    roundedOff?.classList.toggle('hidden', !isEnabled);
+    localStorage.setItem('rounded', isEnabled ? 'false' : 'true');
   });
 </script>
 

@@ -1,16 +1,62 @@
 ﻿---
 import Layout from '../layouts/Layout.astro';
-import { getCollection } from 'astro:content';
-import { CalendarDays, ChevronDown } from 'lucide-react';
+import { CalendarDays, ChevronDown, LayoutList, Network } from 'lucide-react';
+import { getAllPosts, getAllTags } from '../utils/posts';
 
-const posts = (await getCollection('blog'))
-  .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
-const allTags = Array.from(new Set(posts.flatMap(p => p.data.tags))).sort();
+const posts = await getAllPosts();
+const allTags = getAllTags(posts);
+
+// Build tree structure based on first tag (category)
+const categoryMap: Record<string, string> = {
+  'leadership': 'Leadership',
+  'learning': 'Learning',
+  'linear-programming': 'Linear Programming',
+  'machine-learning': 'Machine Learning',
+  'signal-processing': 'Signal Processing',
+  'statistics': 'Statistics',
+  'causal-modeling': 'Causal Modeling',
+  'modeling': 'Modeling'
+};
+
+const treeData = posts.reduce((acc, post) => {
+  const firstTag = post.data.tags[0] || 'uncategorized';
+  const category = categoryMap[firstTag] || firstTag.charAt(0).toUpperCase() + firstTag.slice(1);
+  if (!acc[category]) acc[category] = [];
+  acc[category].push(post);
+  return acc;
+}, {} as Record<string, typeof posts>);
 ---
 
 <Layout title="Archive">
   <section class="container mx-auto px-4 py-8 max-w-4xl">
     <h1 class="font-display text-2xl font-thin mb-6">Blog Archive</h1>
+
+    <!-- View Toggle Buttons -->
+    <div class="flex gap-3 mb-6">
+      <button
+        id="tree-view-btn"
+        class="flex-1 flex items-center justify-center gap-3 px-4 py-2 rounded-lg
+               border border-zinc-200 dark:border-zinc-700/30
+               bg-gradient-to-r from-violet-600/20 to-pink-600/20
+               dark:from-violet-600/40 dark:to-pink-600/40
+               text-violet-700 dark:text-white font-semibold"
+      >
+        <Network className="w-5 h-5" />
+        <span class="font-display font-semibold">Tree</span>
+      </button>
+
+      <button
+        id="list-view-btn"
+        class="flex-1 flex items-center justify-center gap-3 px-4 py-2 rounded-lg
+               border border-zinc-200 dark:border-zinc-700/30
+               bg-transparent
+               text-zinc-600 dark:text-zinc-400
+               hover:border-zinc-300 dark:hover:border-zinc-600"
+      >
+        <LayoutList className="w-5 h-5" />
+        <span class="font-display font-semibold">List</span>
+      </button>
+    </div>
 
     <!-- Controls -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4">
@@ -19,7 +65,7 @@ const allTags = Array.from(new Set(posts.flatMap(p => p.data.tags))).sort();
         type="search"
         placeholder="Search posts…"
         class="
-          flex-grow px-4 py-2
+          flex-1 px-4 py-2
           border border-zinc-200 dark:border-zinc-700
           bg-zinc-50 dark:bg-zinc-800
           text-zinc-900 dark:text-zinc-100
@@ -30,12 +76,12 @@ const allTags = Array.from(new Set(posts.flatMap(p => p.data.tags))).sort();
       />
 
       <!-- Tag select -->
-      <div class="relative inline-block w-full max-w-xs">
+      <div class="relative inline-block w-full sm:w-48">
         <select
           id="tag-select"
           class="
             appearance-none w-full
-            px-3 py-2
+            px-3 py-2.5
             border border-zinc-200 dark:border-zinc-700
             bg-zinc-50 dark:bg-zinc-800
             text-sm text-zinc-900 dark:text-zinc-100
@@ -53,18 +99,17 @@ const allTags = Array.from(new Set(posts.flatMap(p => p.data.tags))).sort();
       </div>
     </div>
 
-    <!-- Posts List -->
-    <div id="posts-container" class="grid gap-8">
+    <!-- List View -->
+    <div id="list-view" class="grid gap-8">
       {posts.map(post => {
         const formattedDate = post.data.pubDate.toLocaleDateString('en-GB', {
-          year:  'numeric',
           month: 'short',
-          day:   'numeric',
+          day: 'numeric',
         });
         const tagList = post.data.tags.join(' ');
         return (
           <article
-            class="relative p-6 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 group overflow-hidden"
+            class="relative p-6 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 group overflow-hidden hover:border-violet-600 dark:hover:border-violet-500 transition-colors"
             data-title={post.data.title.toLowerCase()}
             data-description={post.data.description.toLowerCase()}
             data-tags={tagList.toLowerCase()}
@@ -75,57 +120,198 @@ const allTags = Array.from(new Set(posts.flatMap(p => p.data.tags))).sort();
                      dark:from-blue-950/20 dark:to-purple-950/20 opacity-0
                      group-hover:opacity-100 transition-opacity -z-10"
             />
-            <h2 class="font-display text-xl mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+
+            <h3 class="font-display text-xl mb-2 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
               {post.data.title}
-            </h2>
-            <p class="text-zinc-600 dark:text-zinc-400 mb-3">{post.data.description}</p>
-            <div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-zinc-500">
-              <div class="flex items-center gap-1">
-                <CalendarDays className="w-4 h-4" />
-                <time class="whitespace-nowrap" datetime={post.data.pubDate.toISOString()}>
-                  {formattedDate}
-                </time>
-              </div>
-              {post.data.tags.length > 0 && (
-                <div class="flex gap-2 flex-wrap">
-                  {post.data.tags.map(tag => (
-                    <span class="text-xs px-2 py-1 bg-zinc-100 dark:bg-zinc-800 rounded">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              )}
+            </h3>
+            <p class="text-zinc-600 dark:text-zinc-400 mb-3">
+              {post.data.description}
+            </p>
+            <div class="flex items-center gap-4 text-sm text-zinc-500">
+              <time datetime={post.data.pubDate.toISOString()}>
+                {formattedDate}
+              </time>
+              {post.data.tags.slice(0, 2).map(tag => (
+                <span class="px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded text-xs">
+                  {tag}
+                </span>
+              ))}
             </div>
           </article>
         );
       })}
     </div>
+
+    <!-- Tree View -->
+    <div id="tree-view" class="hidden">
+      {Object.entries(treeData).sort(([a], [b]) => a.localeCompare(b)).map(([category, categoryPosts]) => (
+        <div class="mb-6 tree-category" data-category={category.toLowerCase()}>
+          <h2 class="font-display text-xl font-semibold mb-3 py-1 flex items-center gap-6">
+            <span class="text-violet-600 dark:text-violet-400" style="font-family: 'Courier New', Courier, monospace; letter-spacing: -0.3em;">└─</span>
+            <span>{category}</span>
+          </h2>
+          <div class="ml-12 space-y-2">
+            {categoryPosts.map(post => {
+              const formattedDate = post.data.pubDate.toLocaleDateString('en-GB', {
+                month: 'short',
+                day: 'numeric',
+              });
+              const tagList = post.data.tags.join(' ');
+              return (
+                <article
+                  class="relative pl-6 py-2 border-l-2 border-zinc-200 dark:border-zinc-700
+                         hover:border-violet-600 dark:hover:border-violet-500 transition-colors
+                         tree-post"
+                  data-title={post.data.title.toLowerCase()}
+                  data-description={post.data.description.toLowerCase()}
+                  data-tags={tagList.toLowerCase()}
+                >
+                  <a href={`/blog/${post.slug}`} class="group">
+                    <h3 class="font-display text-xl font-normal dark:font-thin mb-0.5 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
+                      {post.data.title}
+                    </h3>
+                    <div class="flex items-center gap-2 text-xs text-zinc-500">
+                      <time datetime={post.data.pubDate.toISOString()}>
+                        {formattedDate}
+                      </time>
+                      {post.data.tags.length > 1 && (
+                        <span class="text-zinc-400">•</span>
+                      )}
+                      {post.data.tags.slice(1, 3).map(tag => (
+                        <span class="text-zinc-500 dark:text-zinc-400">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </a>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
   </section>
 
   <script type="module">
-    const postsContainer = document.getElementById('posts-container');
-    const posts = Array.from(postsContainer.children);
+    const listViewBtn = document.getElementById('list-view-btn');
+    const treeViewBtn = document.getElementById('tree-view-btn');
+    const listView = document.getElementById('list-view');
+    const treeView = document.getElementById('tree-view');
     const searchInput = document.getElementById('search-input');
-    const tagSelect   = document.getElementById('tag-select');
+    const tagSelect = document.getElementById('tag-select');
+
+    // Get all posts/tree items
+    const listPosts = Array.from(listView.children);
+    const treePosts = Array.from(treeView.querySelectorAll('.tree-post'));
+    const treeCategories = Array.from(treeView.querySelectorAll('.tree-category'));
+
+    // Active button style
+    const activeClasses = 'border border-zinc-200 dark:border-zinc-700/30 bg-gradient-to-r from-violet-600/20 to-pink-600/20 dark:from-violet-600/40 dark:to-pink-600/40 text-violet-700 dark:text-white font-semibold';
+    const inactiveClasses = 'border border-zinc-200 dark:border-zinc-700/30 bg-transparent text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600';
+    const activeStyle = '';
+    const inactiveStyle = '';
+
+    // Get saved view preference
+    let currentView = localStorage.getItem('blogView') || 'tree';
+
+    function setView(view) {
+      currentView = view;
+      localStorage.setItem('blogView', view);
+
+      const listIcon = listViewBtn.querySelector('svg');
+      const listText = listViewBtn.querySelector('span');
+      const treeIcon = treeViewBtn.querySelector('svg');
+      const treeText = treeViewBtn.querySelector('span');
+
+      if (view === 'list') {
+        listView.classList.remove('hidden');
+        treeView.classList.add('hidden');
+
+        listViewBtn.className = `flex-1 flex items-center justify-center gap-3 px-6 py-4 rounded-lg ${activeClasses}`;
+        listViewBtn.style.cssText = activeStyle;
+        treeViewBtn.className = `flex-1 flex items-center justify-center gap-3 px-6 py-4 rounded-lg ${inactiveClasses}`;
+        treeViewBtn.style.cssText = inactiveStyle;
+
+        listIcon.className = 'w-5 h-5';
+        listText.className = 'font-display font-semibold';
+        treeIcon.className = 'w-5 h-5';
+        treeText.className = 'font-display font-semibold';
+      } else {
+        listView.classList.add('hidden');
+        treeView.classList.remove('hidden');
+
+        listViewBtn.className = `flex-1 flex items-center justify-center gap-3 px-6 py-4 rounded-lg ${inactiveClasses}`;
+        listViewBtn.style.cssText = inactiveStyle;
+        treeViewBtn.className = `flex-1 flex items-center justify-center gap-3 px-6 py-4 rounded-lg ${activeClasses}`;
+        treeViewBtn.style.cssText = activeStyle;
+
+        listIcon.className = 'w-5 h-5';
+        listText.className = 'font-display font-semibold';
+        treeIcon.className = 'w-5 h-5';
+        treeText.className = 'font-display font-semibold';
+      }
+
+      applyFilters();
+    }
 
     function applyFilters() {
       const query = searchInput.value.trim().toLowerCase();
-      const tag   = tagSelect.value.toLowerCase();
+      const tag = tagSelect.value.toLowerCase();
 
-      posts.forEach(post => {
-        const matchesQuery = !query ||
-          post.dataset.title.includes(query) ||
-          post.dataset.description.includes(query) ||
-          post.dataset.tags.includes(query);
-        const matchesTag = !tag || post.dataset.tags.split(' ').includes(tag);
-        post.style.display = (matchesQuery && matchesTag) ? '' : 'none';
+      if (currentView === 'list') {
+        // Filter list view
+        listPosts.forEach(post => {
+          const matchesQuery = !query ||
+            post.dataset.title.includes(query) ||
+            post.dataset.description.includes(query) ||
+            post.dataset.tags.includes(query);
+          const matchesTag = !tag || post.dataset.tags.split(' ').includes(tag);
+          post.style.display = (matchesQuery && matchesTag) ? '' : 'none';
+        });
+      } else {
+        // Filter tree view
+        treePosts.forEach(post => {
+          const matchesQuery = !query ||
+            post.dataset.title.includes(query) ||
+            post.dataset.description.includes(query) ||
+            post.dataset.tags.includes(query);
+          const matchesTag = !tag || post.dataset.tags.split(' ').includes(tag);
+          post.style.display = (matchesQuery && matchesTag) ? '' : 'none';
+        });
+
+        // Hide categories with no visible posts
+        treeCategories.forEach(category => {
+          const visiblePosts = category.querySelectorAll('.tree-post:not([style*="display: none"])');
+          category.style.display = visiblePosts.length > 0 ? '' : 'none';
+        });
+      }
+    }
+
+    // Preload blog posts on hover
+    function setupPreloading() {
+      const allLinks = document.querySelectorAll('a[href^="/blog/"]');
+      allLinks.forEach(link => {
+        link.addEventListener('mouseenter', () => {
+          const href = link.getAttribute('href');
+          if (href && !document.querySelector(`link[rel="prefetch"][href="${href}"]`)) {
+            const prefetchLink = document.createElement('link');
+            prefetchLink.rel = 'prefetch';
+            prefetchLink.href = href;
+            document.head.appendChild(prefetchLink);
+          }
+        });
       });
     }
 
+    // Event listeners
+    listViewBtn.addEventListener('click', () => setView('list'));
+    treeViewBtn.addEventListener('click', () => setView('tree'));
     searchInput.addEventListener('input', applyFilters);
     tagSelect.addEventListener('change', applyFilters);
 
-    // initial render
-    applyFilters();
+    // Initialize
+    setView(currentView);
+    setupPreloading();
   </script>
 </Layout>

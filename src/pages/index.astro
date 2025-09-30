@@ -1,11 +1,9 @@
 ﻿---
 import Layout from '../layouts/Layout.astro';
-import { getCollection } from 'astro:content';
 import { ArrowRight, BarChart3, Baby, MessageCircleQuestionMark } from 'lucide-react';
+import { getRecentPosts } from '../utils/posts';
 
-const posts = (await getCollection('blog'))
-  .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf())
-  .slice(0, 3);
+const posts = await getRecentPosts(3);
 
 const topics = [
   { icon: Baby,   title: "", description: "Hi there! Where are you? My paternity leave blog. It is where I go to exercise my mind." },
