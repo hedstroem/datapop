@@ -1,0 +1,73 @@
+---
+title: 'Embedding texts into latent spaces [WIP]'
+description: ''
+pubDate: 2025-09-29
+tags: ['natural-language-processing']
+---
+
+For my [masters thesis](https://www.diva-portal.org/smash/record.jsf?pid=diva2%3A1323994&dswid=3705) I worked on [Word2Vec](https://arxiv.org/pdf/1301.3781) style models. 
+It was in 2019 and [transformers](https://arxiv.org/pdf/1706.03762) were just starting to gain traction.
+GPT-2 was revealed and [OpenAI famously said they would not release the model](https://www.youtube.com/watch?v=AJxLtdur5fc) because they were afraid of the potential applications.
+It was a different time.
+
+Since then natural language processing (NLP) tools has become more accessible than ever.
+NLP has basically become the poster boy for AI. 
+There are countless pay-per-token APIs and open source models to download from places like [Hugging Face](https://huggingface.co/models).
+
+Latent spaces have always fascinated me, where complex but regular shapes can be expressed with a few parameters.
+My mind was blown then I first learned about autoencoders.
+The concept made so much sense to me and it was amazing that one could train a system such a system end-to-end.
+And naturally I was intrigued to find out that this can be done for text as well.
+
+Embeddings are normalized vectors $v \in \mathbb{R}^d, \|v\| = 1$.
+Word2Vec trains a vocabulary where a word $w$ is translated to a vector $v_w$.
+For the latest generation of large language models (LLMs) one typically converts an entire text $s$ into a vector $w_s$.
+Document embedding was actually the topic of my thesis, 
+I was comparing directly training document embeddings 
+([Doc2Vec](https://arxiv.org/pdf/1405.4053), [Doc2VecC](https://arxiv.org/pdf/1707.02377))
+versus creating them from, for example, word embeddings as $w_s = \frac{1}{|s|} \sum_{w \in s} v_w$.
+It worked alright for most tasks but most of those methods are redudant now.
+
+When training a model to produce embeddings the goal is to make sure that similar texts point in the same direction.
+This is the same as saying that the scalar product / cosine distance should be close to 1 for two vectors $v_{s_1} \cdot v_{s_2} = cos(\alpha)$.
+For Word2Vec these were also additative so that $v_{king} - v_{man} + v_{woman} \approx v_{queen}$, allowing one to query contextually.
+The additative nature comes from how the model is trained. 
+LLM embeddings to not allow for this but instead modern embedding models allow queries, which can warp the embedding space.
+
+If I were to work with text analysis today I would download a good, small open source model from Hugging Face.
+It is September 2025 as I am writing this and one of the top trending embedding models is a model from Alibaba called [Qwen3-Embedding-0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B).
+It scores well on the [MTEB multilingual leaderboard](https://huggingface.co/spaces/mteb/leaderboard), which is good because as a European you are likely to work with more languages than English.
+
+600 million weights is lightweight enough to run on your personal computer, which I prefer when prototyping.
+Using the library `sentence_transformers` one can create embeddings in a jiffy:
+```python
+from sentence_transformers import SentenceTransformer
+
+model = SentenceTransformer("Qwen/Qwen3-Embedding-0.6B")
+
+sentences = [
+    "The weather is lovely today.",
+    "I am a cow. Moo!",
+    "Fint väder idag."
+]
+embeddings = model.encode(sentences, prompt = "Treat Swedish and English equally")
+similarities = embeddings @ embeddings.T
+print(similarities)
+```
+```
+[[1.    0.677 0.898]
+ [0.677 1.    0.668]
+ [0.898 0.668 1.   ]]
+```
+If you do not have the model downloaded then model call will do it for you.
+One can also download the model artifacts separately and put them in that folder, which is what I did.
+This allow you create embeddings offline, which is neat.
+I did use the OpenAI embeddings API for a while when it came out (the cost for creating embeddings is low, storing them and quering however...) but not sending potentially sensitive data is preferable.
+
+By the way, removing that prompt "Treat Swedish and English equally" results in the following similarities:
+```
+[[1.    0.442 0.685]
+ [0.442 1.    0.391]
+ [0.685 0.391 1.   ]]
+```
+So warping the embedding space will impact downstream use like clustering or visualization.
