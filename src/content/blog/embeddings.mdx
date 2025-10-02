@@ -1,7 +1,7 @@
 ---
-title: 'Embedding texts into latent spaces [WIP]'
-description: ''
-pubDate: 2025-09-29
+title: 'Embedding texts into latent spaces'
+description: 'Testing instruction tuning on Qwen3'
+pubDate: 2025-10-02
 tags: ['natural-language-processing']
 ---
 
@@ -70,6 +70,44 @@ By the way, removing that prompt "Treat Swedish and English equally" results in 
  [0.442 1.    0.391]
  [0.685 0.391 1.   ]]
 ```
-So warping the embedding space will impact downstream use like clustering or visualization.
+So warping the embedding space will potentially impact downstream use.
+However, its effectiveness remains to be fully understood.
+To test this I used Claude to generate some examples of health & safety reports:
+```
+    1. "En medarbetare föll från en stege på tredje trappsteget när hen skulle byta en glödlampa i taket. Stegen var inte ordentligt säkrad och medarbetaren förlorade balansen. Hen landade på vänster arm och axel. Skadan bedömdes som en stukning i axeln och medarbetaren sökte vård på vårdcentralen. Ingen riskbedömning hade gjorts innan arbetet och stegen saknade stabiliseringsfötter.",
+    2. "Under arbete i verkstaden fick en anställd metallspån i ögat när hen svarvade utan att använda skyddsglasögon. Skyddsglasögon fanns tillgängliga men medarbetaren valde att inte använda dem eftersom arbetet bara skulle ta 'någon minut'. Personen behövde akut ögonvård för att avlägsna metallspånet. Arbetsplatsinstruktionen om obligatorisk användning av personlig skyddsutrustning hade inte följts.",
+    3. "En lastbilschaufför rapporterade smärta i nedre delen av ryggen efter upprepade lyft av tunga kartonger (ca 25 kg styck) under en hel arbetsdag. Inga lyfthjälpmedel användes trots att sådana fanns tillgängliga på lagret. Chaufören hade inte fått utbildning i ergonomiska lyfttekniker och kände sig pressad av tidsschemat att slutföra leveranserna snabbt. Medicinskt diagnostiserad som muskelspänning i ländryggen.",
+    4. "Vid hantering av rengöringsmedel i städförrådet blandades av misstag klorbaserat rengöringsmedel med ammoniak, vilket skapade giftiga ångor. Två städare exponerades och klagade på andningssvårigheter och irritation i svalget. Kemikalierna hade förvarats i omärkta behållare efter att de ursprungliga förpackningarna slängts. Ingen skada krävde sjukhusvård men personalen observerades på plats. Rutiner för kemikaliehantering och märkning hade inte följts.",
+```
 
-Its effectiveness however, remains to be fully understood.
+With the following instruction prompts:
+```
+Topic: 
+"Instruction: Represent this incident report for clustering by the specific type of equipment, tool, or work environment involved (e.g., ladders, machinery, vehicles, chemicals), ignoring the injury and why it happened:"
+
+Root Cause: 
+"Instruction: What safety rule or procedure was violated in this incident?"
+    
+Injury: 
+"Instruction: Represent this incident report for clustering by the medical nature and mechanism of injury or potential harm, regardless of activity or cause:"
+```
+
+Which yielded the following similarity scores:
+
+| **a** | **b** | **Similarity Topic** | **Similarity Root Cause** | **Similarity Injury** |
+|-------|-------|----------------------|---------------------------|-----------------------|
+| 1     | 3     | 0.64                 | 0.62                      | 0.68                  |
+| 1     | 2     | 0.59                 | 0.62                      | 0.63                  |
+| 2     | 3     | 0.54                 | 0.57                      | 0.55                  |
+| 3     | 4     | 0.50                 | 0.54                      | 0.54                  |
+| 1     | 4     | 0.49                 | 0.51                      | 0.52                  |
+| 2     | 4     | 0.49                 | 0.53                      | 0.60                  |
+
+The chemical indicent 4 is the most distinct, only scoring simiarly to the eye-incident on the injury dimension.
+This could be because safety goggles are common in chemical handling. 
+There definitely are some differences in similarities after conditioning the embeddings on instruction the exact usefulness in this context is hard to gauge.
+Injury seems to be differentiate than topic and root causes.
+
+Perhaps for tasks like this it is instead worth classifying or using text generating LLMs to break out the 5 why's or layers in the Swiss cheese model.
+Understanding how embeddings can be used to multidimensional concepts still remains to be investigated further.
+For now one should mainly use them for "totality" similarity.
