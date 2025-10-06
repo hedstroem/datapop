@@ -239,7 +239,7 @@ const treeData = posts.reduce((acc, post) => {
     const inactiveStyle = '';
 
     // Get saved view preference
-    let currentView = localStorage.getItem('blogView') || 'tree';
+    let currentView = localStorage.getItem('blogView') || 'list';
 
     function setView(view) {
       currentView = view;
