@@ -1,0 +1,292 @@
+---
+title: 'Preparing EU transport network data'
+description: 'Data preparation in QGIS'
+pubDate: 2025-10-21
+tags: ['project', 'logistics', 'data']
+---
+
+import ImageGallery from '../../components/ImageGallery.astro';
+
+Transportation network data can be used for supply chain modeling, network optimization or estimating CO2 / costs.
+This will be an attempt at aggregating interesting sources that can serve as a basis for transportation network analysis.
+
+Here are a few guiding principles:
+* We want a EU-level coverage.
+* We want the size to be manageable (\<2-3 GB).
+* Strategic insights > Exact route accuracy.
+* We want multiple modalities:
+    * Truck
+    * Rail
+    * Intermodal (containers which can go on either truck or train)
+    * Ferries
+    * Barge
+    * Vessel
+
+## EuroGeographics
+
+For our backbone we start off with data from [eurogeographics](https://www.mapsforeurope.org/).
+It provides an up-to-date open dataset on global and regional EU levels, courtesy of the [these agencies](https://ome-download-data.s3.eu-west-1.amazonaws.com/euro-global-map/documents/EGM+Attribution+statements.pdf).
+We will start off with the EuroRegionalMap dataset, which they describe as "EuroRegionalMap is a Pan-European topographic vector dataset at scale 1:250000, that is seamless and harmonized across boundaries."
+
+[Link to dataset](https://www.mapsforeurope.org/datasets/euro-regional-map)
+
+[Documentation](https://ome-download-data.s3.eu-west-1.amazonaws.com/euro-regional-map/documents/ERM_2025_Specification.pdf)
+
+We tried starting off with the 1:1000000, Global dataset but it was strangely enough missing key Scandiavian features like the Öresund bridge and the Helsingborg-Helsingor ferry.
+It seems that the aggregration method used botched a few border edges.
+Below is a screenshot of the problem, ferries are in blue and roads are in black:
+
+![...](/images/project_eu_transport_data/eu_transport_data_1.png)
+
+From what we could see this was not a problem for the regional dataset.
+We download the shape-file (2.7 GB) and get to work in [QGIS](https://qgis.org/).
+There are a few layers that we are interested in:
+* LandmaskA.shp - Background shapes for EU landmasses.
+* RailrdL.shp - Rail lines.
+* RailrdC.shp - Rail stations.
+* RoadL_part1.shp - Road lines (1/2).
+* RoadL_part2.shp - Road lines (2/2).
+* FerryL.shp - Ferry lines.
+* FerryC.shp - Ferry docks.
+* HarborC.shp - The point representation of a port collected as an area feature that provides the intermodal connection to the road or railway network.
+* HarborP.shp - All TEN ports and all statistical ports according to Commission Decision 2005/366/EC of 4 March 2005 (Reference: GISCO Port database).
+* WatercrsL.shp - Watercourse (and in our case, navigable waterways).
+
+We ignore intersection (InterC) and level crossing (LevelsC) nodes for the roads because we will be simplifying the network.
+It is already so big that they had to split it into two chunks.
+Actually, lets start off with that one.
+
+### Road network
+
+The road network is detailed. Here is an Öresund overview:
+
+![...](/images/project_eu_transport_data/eu_transport_data_2.png)
+
+Luckily the roads have features that can be used to filter them.
+We do not need local roads, only EU highways or major transportation routes.
+In the documentation we find that this feature is called RTT or Route Intended Use. 
+It takes the following values:
+* -32768 - Unknown
+* 16 - National motorways
+* 14 / 15 - Primary / secondary route
+* 984 - Local route
+
+For our needs we can filter `RTT IN (14, 16)`:
+![...](/images/project_eu_transport_data/eu_transport_data_3.png)
+
+After exporting these selected features we can combine them using `Processing Toolbox -> Vector General -> Merge Vector Layers`.
+This has already gotten us from 2 layers with 1.27M lines each to one with 580k lines.
+But we are not done yet.
+If one were to select a part of the road one would quickly find out that it is made out of segments.
+Here is one example where we have selected every other segment to highlight how many segments fit between two intersections.
+For our strategic analysis we ideally only need to know the length between the two intersections, maybe if it is a motorway:
+
+![...](/images/project_eu_transport_data/eu_transport_data_4.png)
+
+To resolve this we will reforge the road network anew by dissolving it and later breaking it.
+We dissolve (`Processing Toolbox -> Vector Geometry -> Dissolve`, remember to "keep disjoint features separate") on ICC (country code), RTT (route intended use) and TOL (toll category).
+This takes us down to 133k lines but of course this is not a true network because we are not garanteed to have splits at intersections.
+To ensure this we apply the clean tool from GRASS, `Processing Toolbox -> GRASS -> Vector -> v.clean`.
+We tick the boxes to break (at intersections), rmdupl (remove duplicate lines) and rmline (remove dangling lines).
+This takes us up to 168k lines but this is now a true network.
+
+Unfortunately this does not fix the fact that countries like Denmark, the Netherlands and Belgium have modelled even their on- and off-ramps.
+This creates quite bit of redudant features but for now we have to live with it.
+It is possible to identify small loops in a network of this size pretty quickly but GIS is not that suitible for it.
+
+![...](/images/project_eu_transport_data/eu_transport_data_5.png)
+
+Using `Processing Toolbox -> GRASS -> Vector -> v.net.components` we can create a node and edge layer from the network.
+This nets us 113k nodes in the road network.
+Finally we can calculate the length of each edge using the \@length formula in the field calculator.
+
+![...](/images/project_eu_transport_data/eu_transport_data_6.png)
+
+### Rail network
+
+For the rail network we can copy the methodology.
+Instead of RTT we use TUC (transporation use category) with
+* -32768 - Unknown
+* 25 - Cargo/Freight
+* 26 - Passenger
+* 45 - General
+
+Where we then are interested in cargo or general.
+We dissolve on ICC (country code), FCO (feature configuration), RRA (railroad power source) and RSD (railroad speed class). 
+RRA tells us whether it is electrified or not, RSD gives high-speed and FCO if it is one or two tracks.
+We do this and ... what happened to Italy?
+
+![...](/images/project_eu_transport_data/eu_transport_data_7.png)
+
+Apparently all Italian railways are classified as passenger routes.
+This means that we have to use another label `TUC IN (25, 45) OR TEN = 1`.
+TEN is the feature showing if it is a part of the transeuropean transport network, which is a good surrogate.
+
+![...](/images/project_eu_transport_data/eu_transport_data_8.png)
+
+By the way, the line count went from 202k to 24k.\
+The number of nodes after `Processing Toolbox -> GRASS -> Vector -> v.net.components` is 19k.
+
+### Ferries
+
+Ferries are straight-forward. The docks and lines look great and there are few enough to not require compression.
+
+![...](/images/project_eu_transport_data/eu_transport_data_11.png)
+
+### Navigable waterways
+
+For the WatercrsL layer we want to filter `NVS = 3`, removing all small rivers and streams.
+This reduces the amount of lines from 1.09M to 20k.
+There is another features called National Watercourse Hierarchy (WCH) that can isolate how major / minor the wateryway is.
+Here it is color coded where 1-5 is main / first to fifth. 
+9 is all other watercourses and -32678 is unknown.
+
+![...](/images/project_eu_transport_data/eu_transport_data_16.png)
+
+One would just like to filter on `WCH IN (1,2)` but it seems features like the Kiel canal has some WCH = 9 category.
+This would effectively cut off this major waterway, which can be seen below:
+
+![...](/images/project_eu_transport_data/eu_transport_data_15.png)
+
+In order to have full coverage we use ´WCH IN (1,2,9)´ as a filter.
+Similarly to the harbors we would need to know where barges carrying freight can actually be loaded.
+Something like a river width or even barge classification would be nice to sort out which waterways are valid transport routes.
+
+### Shipping network
+
+At this point we have a crude road, rail, ferry and barge network.
+This leaves shipping.
+The EuroGeographics datasets do not have this type of information.
+It was surprisingly hard to find "EU shipping lanes" by Googling.
+
+The best method seems to be to reverse-engineer where ships go using vessel density statistics.
+One good source for this was the [EMODnet Human Activities datasets](https://ows.emodnet-humanactivities.eu/geonetwork/srv/api/records/0f2f3ff1-30ef-49e1-96e7-8ca78d58a07c).
+This, unlike all the other data, is a raster dataset.
+That means that it is not yet a network, only data in a geographical grid.
+
+We download the 2024 data for cargo and load it into QGIS.
+We start by visualizing the whole thing by log-transforming the values (density as *hours per square kilometre per month*)
+and adding a pretty color gradient:
+
+![...](/images/project_eu_transport_data/eu_transport_data_17.png)
+
+Using `Processing Toolbox -> Raster Analysis -> Fuzzify raster (near membership)` we can somewhat contrast and isolate egdes.
+This can be tuned further but the initial parameters seemed promising.
+After that we:
+* Threshold the raster to create a binary representation data.
+* Clump the thresholded raster and take the main piece.
+* Convert to a polygon, fill in holes and simplify the edges.
+* Convert back to a raster and use raster thinning.
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/project_eu_transport_data/eu_transport_data_18.png",
+      alt: "Threshold the raster to create a binary representation data.",
+      caption: "Threshold the raster to create a binary representation data."
+    },
+    {
+      src: "/images/project_eu_transport_data/eu_transport_data_19.png",
+      alt: "Clump the thresholded raster and take the main piece.",
+      caption: "Clump the thresholded raster and take the main piece."
+    },
+    {
+      src: "/images/project_eu_transport_data/eu_transport_data_20.png",
+      alt: "Convert to a polygon, fill in holes and simplify the edges.",
+      caption: "Convert to a polygon, fill in holes and simplify the edges."
+    },
+    {
+      src: "/images/project_eu_transport_data/eu_transport_data_21.png",
+      alt: "Convert back to a raster and use raster thinning.",
+      caption: "Convert back to a raster and use raster thinning."
+    },
+  ]}
+  layout="carousel"
+/>
+
+The last step is to take the thinned raster and convert it into a vector line.
+
+![...](/images/project_eu_transport_data/eu_transport_data_22.png)
+
+This methodology was so-and-so and it might be better to just draw the network by hand over the density.
+
+## All the network edges
+
+Color coding:
+* Black - Roads (79 MB, 169k edges)
+* Yellow - Rail (44 MB, 24k edges)
+* Magenta - Ferries (1 MB, 1.5k edges)
+* Lighter blue - Navigable waterways (9 MB, 18k edges)
+* Darker blue - Maritime shipping (2 MB, 8.5k edges)
+
+A dataset like this can be used for distance, time or CO2 calculations between a few terminal / harbor nodes.
+
+![...](/images/project_eu_transport_data/eu_transport_data_23.png)
+
+## Terminals, harbors, ports and other resources
+
+
+**TL;DR**\
+**After a few evenings I gave up the search for a good index of ports, harbors and terminals.**
+
+<details>
+
+### Harbors \& ports
+The harbor layers have an ID (HID) that can be used when visualizing them.
+When inspecting the dataset we find:
+1. Spain has no ports (in this dataset), which is problematic.
+2. We seem to have port for inland waterways, which is good!
+
+![...](/images/project_eu_transport_data/eu_transport_data_12.png)
+
+After looking around for some alternative source we found:
+
+Eurostat GISCO (Geographic Information System of the Commission) has two [ports of 2009 and 2013 datasets](https://ec.europa.eu/eurostat/web/gisco/geodata/transport-networks).\
+This is the same GISCO as referenced by HarborP.
+
+GEOSS (Global Earth Observation System of Systems) has a [ports of 2019 dataset](https://sdi.eea.europa.eu/catalogue/geoss/eng/catalog.search#/metadata/f871b3db-bb30-42ef-9e1f-3c8358833caa).
+
+These five datasets have a lot of overlap as can be seen with these Gothenburg/Genoa examples:
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/project_eu_transport_data/eu_transport_data_13.png",
+      alt: "Harbor dataset example: Gothenburg",
+      caption: "Harbor dataset example: Gothenburg"
+    },
+    {
+      src: "/images/project_eu_transport_data/eu_transport_data_14.png",
+      alt: "Harbor dataset example: Genoa",
+      caption: "Harbor dataset example: Genoa"
+    }
+  ]}
+  layout="carousel"
+/>
+
+So finding a place where one can stop a vessel is no problem.
+The problem is indentifying which of these ports are interesting for different types of analyses.
+The same problem arises for rail stations and intermodal terminals.
+
+### Railway stations
+
+![...](/images/project_eu_transport_data/eu_transport_data_9.png)
+
+The railway station layer also has a transport use category (TUC) classification of these but it varies by country.
+Without even explaining the color labeling it can clearly be seen that different methods of classification has been done.
+This makes this data hard to use because it is not clear where freight can be loaded:
+
+![...](/images/project_eu_transport_data/eu_transport_data_10.png)
+
+### Resources on (primarily intermodal) terminals
+
+Intermodal route/CO2 estimation tool: https://intermodal-railfreight.eu/interactive-map \
+Project page: https://www.esep4freight.eu/
+
+Intermodal map: https://www.intermodal-map.com/index_en.html
+
+Intermodal terminals map: https://intermodal-terminals.eu/terminalmap.php
+
+European transport maps for containter/ro-ro/intermodal: https://www.europeantransportmaps.com/
+
+</details>
