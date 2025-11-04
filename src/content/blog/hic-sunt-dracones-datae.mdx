@@ -1,0 +1,136 @@
+---
+title: 'Hic Sunt Dracones Datae'
+description: 'When ideas behind projects become too powerful'
+pubDate: 2025-11-04
+tags: ['leadership']
+---
+
+In old maps people used to write *here be dragons* in the terra incognita, the uncharted parts of the map.
+This is where I have prefered working in a data science context;
+at the cross-section of research, innovation and business.
+This is the land where new insights are found and turned into operational or strategic gains.
+Of course, much like the warning heeds, you *can* encounter (data) dragons if you go too far into the unknown.
+
+I will share stories about two dragons I have encountered.
+After that I will define some dragon characteristics and finally talk about how to (organizationally) avoid them.
+There will be parallels to what I have written before on sourdough and innovation management.
+
+## Dragon #1: Supply chain optimization model
+
+This is a story about slaying a dragon.
+
+I inherited it from a team of 5-10 consultants who built it over 3 months.
+The targeted audience were the sales \& operations manager together with the business development manager and head of sales.
+The idea was to let an mixed integer linear program (MILP) come up with an optimial selection of customer contracts.
+In order to do this it had to decide a production plan and by extension; select production recipes and raw material sourcing w.r.t. inbound logistics.
+On paper this sounds like a great idea!
+
+The some of the flaws? 
+1. Almost all data except the customer contracts was gathered by hand by the team of consultants.
+This means bothering half a dozen managers to get their next year projections for production capacities, import volumes, transport prices and so forth.
+2. The users had to spend a lot of time sitting with us and validating the input \& output of the model.
+3. After a while, we realized that the constraints made the solution match what they were already planning to do!
+
+So flaw 1 and 2 meant that I would spend the majority of my time chasing and validating data that had required at least 2-3 consultants before.
+But even if we were successful we were always getting the feedback to better approximate their current plan so they could relate to alternate scenarios.
+When we could not keep up they lost interest and started saying no to meetings.
+Due to the sunk-cost of letting all the consultants develop this model it was highly encouraged keep trying...
+
+And that is what we did not do.
+Instead we initiated two moves based on the insight that we should only focus on the customer contract part of the analysis.
+After all, that was the value proposition of the initiative but somehow it had evolved into modeling the entire supply chain, 
+without any information architect or data engineer, or any structured access to the other business units data.
+
+The first move was to refactor the model to use budgeted production (with $\pm$\% flexibility) plan 
+and the relative cost of raw materials without optimizing the path to production.
+This allowed the model to always be up-to-date with minimal data effort.
+The second move was to build a BI toolbox where the contract data was laid out in full, 
+populated with interesting metrics used by the optimization model (like price leakage, freight estimates, e.t.c.)
+and the proposed contract selection.
+
+Would you guess that after only 1 year of use the proposed contracts using a MILP were redudant.
+It turns out that the increase in transparency from access to the same high-quality data 
+and informative estimates \& metrics made the sales directors work more effectively as a group.
+Instead their requests only focused on expanding the scope and usability of the BI toolbox.
+
+And hence the dragon was slain.
+
+## Dragon #2: Health \& safety analytics
+
+This is the story about the birth of a dragon.
+
+I was a part of a group of 2 lucky individuals who got to work with analyzing health \& safety reports (and do good).
+My partner, a business analyst, gathered a bunch of managers and work environment engineers that we could
+workshop with and test concepts.
+The unlucky part was that this was a priority 3 task and my partner had to take a lot of time off, 
+so I basically worked $<20$\% on it and had to carry out the (lack of) planning as well.
+
+Despite all this we had a good chance to do something really interesting here.
+I was sold on the initial thesis as presented by a soon-to-be-pensioner coworker to someone in top management:
+"If insurance companies can set premiums to match the incident risk, why can not we use the same tools to guide health \& safety investing?"
+
+The blocking data problem from just setting up effective statistics was the lack of usable categories and detecting
+links between risk observations, near misses and accidents.
+This is where models for language classification and text embedding came in handy.
+Due to the complexity of the data it was hard to know how to avoid false positives.
+With hindsight I now see potential paths forward but at the time it was a nice way to research interesting methods.
+
+A dragon is birthed because two things go wrong:
+1. Despite the project being stuck in prio 3 with little-to-no resources, no one communcates this to top management.
+Instead it is all green checkboxes in the PPTs showing the status of different initiatives.
+2. Because of the success of RAG we showcase a few ideas on this dataset. 
+But decide that it is not relevant to our analysis, more that it is a potential interface for less technically minded users.
+
+So after 9 months of small spurts of experimentation we are asked to do a usable RAG demo for a QBR.
+Not ideal because we all developer resources were earmarked for other projects. 
+However, a quick fix was found, turns out that one could prompt Microsofts Copilot from inside PowerBI to generate summaries of data,
+like for example health \& safety reports descriptions.
+The demo was a success but... now everyone expected this to be the deliverable, which it was not.
+
+After 6 weeks of running tests with a group of users we had enough to finalize a recommendation for next steps.
+We considered this to have been a technical prestudy and we noted that more resources were required to truly
+match the scope of helping both managers and work environment engineers.
+That is when top management communicated that they had expecations that this concept was to be released 3 months later.
+We were asked what more we needed to release it... and since it was demo-ready it required no more input
+but it was also not a tool that could help users in their day-to-day, quarterly or annual work.
+In discussions with top management it seems that they were fine with releasing a demo,
+as long as it was AI applied in an exciting field.
+
+And this is where I noted that a dragon had hatched.
+
+The story ends with a release of a demo and most of us moving on to work on other initiatives.
+
+## What makes a dragon?
+
+Dragons are majestic, mesmerizing monsters. 
+They (as ideas, memes) become so powerful to the point where they can not be managed.
+Both dragons 1 and 2 are products of ambition without anchoring.
+Dragon #1 was built so grand that it became unwieldy to the govern.
+Dragon #2 had a grand vision, which suffered from being 3rd priority and then getting hijacked by AI hype.
+
+Getting eaten by a dragon is a consequence of going too far of the map.
+It is the most painful ending to an innovative venture.
+In a world where processes work as intended the end comes much, much sooner.
+If a project becomes to big to brake or criticize then it can quickly turn into a big waste of resources.
+I figure *sacred cows* is another name for it, especially when effort has become core business.
+
+## How to avoid dragons?
+
+The answer is quite easy, simple accounting.
+
+Now... the emotional implications of project, idea and resource accounting are more difficult.
+People will come to love familiar concepts \& ideas that they birthed, 
+and they will usually fight for them for way too long.
+It is hard to be a stickler and point out that a project drawing 200% of the initial resource estimation is a problem.
+Now in many cases there are logical explainations but the point is that *the commitment has to be reviewed* to avoid sourdoughs and dragons.
+
+You can not only shut down ideas because then you are just a villain.
+The balanced way forward is to also bet regularly on ideas that seem promising, despite the evidence telling you otherwise.
+As a rule of thumb of rule of thumbs one could probably say to use the 80/20 split.
+People will always be enthusiastic about starting or trying something new so do not worry about killing all great ideas.
+
+Also be clear and aligned about deliverables.
+Use the SMART criteria or another framework to scope the length of the journey into the unknown.
+This could have helped with avoiding dragon #2.
+Dragon #1 was a half-baked ambitious solution and whoever did the resource estimation did not look at how much effort this beast required.
+Perfect for a consultant charging by the hour, not for an employee that you want to juggle multiple projects.
