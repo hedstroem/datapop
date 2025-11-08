@@ -1,0 +1,107 @@
+---
+title: 'Concepts with a lot of modeling uncertainty'
+description: 'Creating a model is easy - making it relevant for a business problem is hard.'
+pubDate: 2025-11-08
+tags: ['modeling', 'forecasting', 'optimization']
+---
+
+## Forecasting
+
+Creating a forecasting model is easy - forecasting as a business problem is hard.
+
+![...](/images/ideas/ideas_1.png)
+
+The forecast in the graph above was created using [Meta's Prophet](https://facebook.github.io/prophet/docs/quick_start.html).
+```python
+m = prophet.Prophet(
+    growth = "linear", # Default setting
+    yearly_seasonality = True, 
+    weekly_seasonality = False, 
+    daily_seasonality = False
+)
+m.fit(df)
+future = m.make_future_dataframe(periods = 24, freq = "MS") # 24 months ahead, 1st of each month
+forecast = m.predict(future)
+```
+
+The intuition behind Prophet and many other forecasting tools is relatively simple, follow the repeating pattern.
+This makes sense as many processes follow seasonal patterns.
+Classical time series course examples include the observation that drowning accidents and ice cream sales correlate.
+Of course the common cause is warm weather, which happens to cycle as the Earth moves around the sun.
+
+There is something dangerous about that 95% confidence interval.
+A misinterpretation of its meaning would be that the future lies within that band 19 out of 20 times.
+It does not.
+Instead it is just showing the amount of uncertainty in the model fit given the model assumptions.
+So in a world where your model assumptions are correct - it is indeed where you would expect 95% of the observations to lie.
+
+Prophet made one quite significant modeling assumption that may not hold up in practice, the trend.
+The default setting is a linear trend but committing to that assumption requires insight into the underlying mechanics.
+Maybe 2024 was just a record year, in that case a flat trend might be a better assumption for the future:
+
+![...](/images/ideas/ideas_2.png)
+
+This type of modeling uncertainty makes or breaks whether the usability.
+Backtesting models is a helpful strategy but is not a substitute for domain knowledge.
+Designing a forecasting model to fit the business understanding is key to its usefulness.
+A useful strategy when forecasting is to study trends separately using e.g. causal modeling or dynamical systems.
+
+## State detection
+
+Imagine an algorithm can automatically identify and label states based on incoming signals.
+At first it detects "machine off", then "machine on", later "high load" and "low load" gets identified.
+After some time the algorithm quantifies some drift in the "high load" mode during the high peaks,
+indicating a new phenomena to investigate.
+
+This type of online / streaming state detection is a beautiful idea.
+It could be useful for digital twins, condition monitoring and predictive maintenance applications.
+One of the simplest method for this is to do time series clustering using streaming K-means.
+
+The biggest hurdle to overcome is catastrophic forgetting.
+The uncertainty in modeling is a consequence of the time series heterogeneity.
+K-means does have some insulation towards this because old centroids are not updated if the incoming data is closer to other centroids.
+One could for example use two models, one for the short-term (for detecting drift) and one long term (for detecting states).
+Another method could be to replay old segments and train the model on those.
+
+Ultimately the choice of algorithm / model depends on the problem.
+
+If we drop the ambition to do this on online / streaming data one basically wants to do classification.
+By labeling a few states and verifying with clustering methods one can create a probabilistic state model.
+Here is where one can leverage conformal prediction frameworks to allow for empty set predictions, 
+meaning that no class / state fits the observations, which would mean that the machine is in an anomalous state.
+
+![...](/images/ideas/ideas_3.png)
+
+## Optimization
+
+"Why should we trust the results of this model?" - Business user\
+"Because the model is optimal!" - Consultant
+
+Something like this has been echoed in actual meeting rooms. 
+I have listened to consultants pitch supply chain models results to the business side on a number of occasions.
+They (the consultants) have an incentive to build a model, get a solution and ship it to the business.
+However, the fact is that I have never built an optimization model that did not require a ton of tuning with the business.
+
+There are two things that one has to be aware of:
+* Optimization algorithms will exploit any loophole in your codified business logic.
+* Input data such as costs, capacities, production volumes and sales are volitile.
+
+The first thing is a natural part of the iterative modeling process.
+You will discover that the model suggests using 94% of carrier A, 5.5% of carrier B and 0.5% of carrier C on a transport stretch, 
+just because you did not force the algorithm to only select one or two carriers.
+A business user will probably point out that out.
+
+The second is trickier.
+Ideally you want an optimized result / plan that is resilient to perturbations in the input data.
+When reading up on this topic I came across *budgeted robust optimization (Bertsimas-Sim)*.
+In a nutshell you can define a budget $\Gamma$ of how many possible deviations (in costs, capacities, e.t.c.) you can realize.
+Deviations $d_i$ to a value $c_i$ with expected value $\bar{c}_i$ creates the span $c_i \in [\bar{c}_i - d_i, \bar{c}_i + d_i]$, 
+where in practice we are usually interested in one extreme (high cost, low capacity and so forth).
+
+For the classic knapsack problem one can bait a naive solver to pick a high-deviation / high-value item A $\bar{c}_A = 100, d_A = 90$
+as compared to a safer option B $\bar{c}_B = 60, d_B = 2$.
+With Bertsimas-Sim constraints and a reasonable $\Gamma$ budget the solver will prioritize B over A.
+
+Other strategies for dealing with uncertainty is to use risk-adjusted profit where $\bar{c}_i$ is replaced by $\bar{c}_i - \lambda d_i$.
+This is mimics what is done in portfolio optimization using quadratic solvers but in a heuristic / approximate way.
+
