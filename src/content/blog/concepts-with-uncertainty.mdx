@@ -96,11 +96,43 @@ Ideally you want an optimized result / plan that is resilient to perturbations i
 When reading up on this topic I came across *budgeted robust optimization (Bertsimas-Sim)*.
 In a nutshell you can define a budget $\Gamma$ of how many possible deviations (in costs, capacities, e.t.c.) you can realize.
 Deviations $d_i$ to a value $c_i$ with expected value $\bar{c}_i$ creates the span $c_i \in [\bar{c}_i - d_i, \bar{c}_i + d_i]$, 
-where in practice we are usually interested in one extreme (high cost, low capacity and so forth).
+where we are usually interested in one extreme (high cost, low capacity and so forth).
 
-For the classic knapsack problem one can bait a naive solver to pick a high-deviation / high-value item A $\bar{c}_A = 100, d_A = 90$
-as compared to a safer option B $\bar{c}_B = 60, d_B = 2$.
-With Bertsimas-Sim constraints and a reasonable $\Gamma$ budget the solver will prioritize B over A.
+Let us transform this constraint
+$$
+(5 \pm 2)x_1 + (3 \pm 1)x_2 \leq 10,
+$$
+where $\bar{c}_1 = 5, d_1 = 2, \bar{c}_2 = 3$ and $d_2 = 1$ by adding auxiliary variables $q$ and $p_i$
+$$
+5 x_1 + 3 x_2 + \Gamma q + p_1 + p_2 \leq 10,
+$$
+subject to
+$$
+p_i \geq d_i x_i - q,\quad p_i \geq 0,
+$$
+which for this example becomes
+$$
+p_1 \geq 2 x_1 - q,\quad p_1 \geq 0,\\
+p_2 \geq 1 x_2 - q,\quad p_2 \geq 0.
+$$
+
+When $\Gamma = 0$ the model can set $q$ to be any number and it will use it to nullify all $p_i$ by setting $q = max(2x_1, 1x_2)$.
+As $\Gamma$ increases it will be punished for keeping a high $q$ and at some point it will lower $q$ because it becomes cheaper
+to allow $p_i$ to deviate individually. This is because each $p_i$ contributes only 1 unit to the total and not $\Gamma$ units.
+Look at it like this, when $\Gamma \geq 1$ but $\Gamma < 2$ then
+$$
+\begin{align*}
+\Gamma q + p_1 + p_2 \text{ (before)} &> \Gamma q + p_1 + p_2 \text{ (after)}\\
+&\downarrow\\
+\Gamma max(2x_1, 1x_2) &> \Gamma min(2x_1, 1x_2) + (max(2x_1, 1x_2) - min(2x_1, 1x_2))\\
+&> max(2x_1, 1x_2) + (\Gamma - 1)min(2x_1, 1x_2)\\
+&\downarrow\\
+(\Gamma - 1) max(2x_1, 1x_2) &> (\Gamma - 1)min(2x_1, 1x_2),
+\end{align*}
+$$
+which works out when $2x_1 \neq 1x_2$.
+This whole balance act will also put pressure on the model proportional to $d_i$ to alter $x_i$.
+Of course this is a simplified example but in principle this is what *budgeted robust optimization* does.
 
 Other strategies for dealing with uncertainty is to use risk-adjusted profit where $\bar{c}_i$ is replaced by $\bar{c}_i - \lambda d_i$.
 This is mimics what is done in portfolio optimization using quadratic solvers but in a heuristic / approximate way.
