@@ -1,0 +1,162 @@
+---
+title: 'Neural Ordinary Differential Equations'
+description: 'Promising method - Difficult to realize'
+pubDate: 2025-11-11
+tags: ['modeling']
+---
+
+As someone with a background in engineering I was excited to hear that the dark arts of neural networks
+can be applied to [ordinary differential equations (ODE)](https://arxiv.org/pdf/1806.07366).
+While it is fully possible to implement a solver in an autograd library; it does not mean that it is efficient.
+The neural ODE paper uses the adjoint sensitivity method to solve an augmented ODE, 
+which gives the gradients of the weights $\frac{\partial L}{\partial \theta}$ 
+and the loss gradient $\frac{\partial L}{\partial \textbf{z}(t_0)}$.
+
+The augmented ODE starts from the initial state 
+$$
+s_0 = [\textbf{z}(t_1), \frac{\partial L}{\partial \textbf{z}(t_1)},\textbf{0}_{|\theta|}],
+$$
+where $\textbf{z}(t_1)$ was the layer output during the forward pass ($t_0 \rightarrow t_1$),
+$\frac{\partial L}{\partial \textbf{z}(t_1)}$ is the backpropagated loss gradient and
+$\textbf{0}_{|\theta|}$ is where $\frac{\partial L}{\partial \theta}$ will be aggregated.
+This initial state is fed in with the following dynamics:
+$$
+\text{aug\_dynamics}(\textbf{z}(t), \textbf{a}(t), t, \theta) 
+\rightarrow
+[f(\textbf{z}(t), t, \theta), -\textbf{a}(t)^\intercal\frac{\partial f}{\partial \textbf{z}}, -\textbf{a}(t)^\intercal\frac{\partial f}{\partial \theta}].
+$$
+
+The quantity $\textbf{a}(t) = \frac{\partial L}{\partial \textbf{z}(t)}$ is the *adjoint*.
+The ODE solver is given this system, integrates it from $t_1 \rightarrow t_0$ (reverse time)
+to solver to give, as stated before, $\frac{\partial L}{\partial \theta}$ and $\frac{\partial L}{\partial \textbf{z}(t_0)}$.
+This avoids backpropagating through potentially hundreds of integration steps with adaptive step length,
+which is more memory and compute efficient.
+
+The authors used neural ODEs as an alternative to resnet architectures.
+However, as an engineer I have always wondered how they can help us understand
+systems where we normally would use differential equations.
+How about $\dot{y} = y$?
+
+```python
+import torch
+import torch.nn as nn
+from torchdiffeq import odeint_adjoint as odeint
+```
+
+First we need to create a neural net, our $f$.
+
+```python
+class neural_net(nn.Module):
+    def __init__(
+            self,
+            n_dim,
+            hidden_layer_sizes = [32],
+            activation_function = nn.GELU
+        ):
+        super(neural_net, self).__init__()
+        self.n_dim = n_dim
+        self.layers = nn.ParameterList()
+        layer_sizes = [n_dim] + hidden_layer_sizes + [n_dim]
+        depth = len(layer_sizes)-1
+        for i in range(depth):
+            n_in = layer_sizes[i]
+            n_out = layer_sizes[i+1]
+            self.layers.append(nn.Linear(n_in, n_out))
+            if i != depth-1:
+                self.layers.append(activation_function())
+
+    def forward(self, t, y):
+        y_ = y
+        for layer in self.layers:
+            y_ = layer(y_)
+        return y_
+```
+
+Then we need to generate some training data.
+Because the solution to $\dot{y} = y$ is $e^y + C$ for some arbitrary constant $C$ (we pick the trivial $C = 0$).
+This means that we are simply learning to generate an exponential:
+```python
+dt = 0.01
+t = torch.arange(0, 1, dt)
+y = torch.exp(t).unsqueeze(1)
+```
+
+Before training we can view an integrated trajectory and the instantaneous derivative according to $f$.
+```python
+f = neural_net(n_dim = 1)
+y0 = y[[0],:]
+with torch.no_grad():
+    yp = odeint(model, y0, t) # integration of f
+    dyp = f(None, y) # instantaneous derivative (time independent so t = None as a placeholder)
+```
+![...](/images/node/node_1.png)
+
+To train this neural network we write some training code.
+We use a batch size of 4 (sampled without replacement), predicting 16 steps ahead, for 256 batches 
+and evaluate the mean square error (MSE) on the last data point of the trajectory.
+Being able to train in batches is overkill for this example but could be handy down the line.
+To also test the fit we only train on the first half of the data, considering the second half to be the test set.
+
+```python
+optimizer = torch.optim.Adam(f.parameters(), lr = 0.01)
+
+def sample_batches(y, n_steps_ahead, batch_size = 32):
+    # Sample without replacement
+    n_max = y.shape[0]
+    batch_indices = np.random.choice(n_max-n_steps_ahead, min(batch_size, n_max), replace=False)
+    yb0 = y[batch_indices]
+    yb = torch.concat([y[i:i+n_steps_ahead].unsqueeze(1) for i in batch_indices], dim=1)
+    return yb0, yb
+
+n_train = len(y) // 2
+n_batches = 256
+n_steps_ahead = 16
+batch_size = 4
+for epoch in range(n_batches):
+    optimizer.zero_grad()                   
+    yb0, yb = sample_batches(y[:n_train], n_steps_ahead, batch_size)
+    yp = odeint(f, yb0, t[:n_steps_ahead])
+    loss = ((yp[-1,:,:] - yb[-1,:,:])**2).sum() # MSE of the last data points
+    loss.backward()                         
+    optimizer.step()                        
+    if (epoch + 1) % 32 == 0 or epoch == 0:
+        print(f'Epoch {epoch+1}, Loss: {loss.item()}')
+```
+
+After training the integration path and the instantaneous derivative converge on the ground truth:
+![...](/images/node/node_2.png)
+
+## Notes on follow up modeling attempts
+
+We tried to fit $\ddot{y} = -y$, which is a sinusoid.
+
+Training the model like before (1D) because one needs to keep track of $\dot{y}$, the rate of change, when integrating.
+So making the model take two features, $y$ and $\dot{y}$ works.
+But to me that is cheating because it is almost never the case that one has a derivative to a measured signal;
+1-step differentiating the signal $y[t+1]-y[t]$ usually leaves you with a super noisy derivative
+and any smoothing will shift the signal back.
+The point is that it seems like too much help for the model to be useful for a simple time series forecasting problem.
+
+Instead the pragmatic way forward is to give the ODE $y[t]$ and $y[t-1]$ (or prehaps even more lags) as inputs to the neural network
+and let it figure out its own filter.
+This model coverges albeit slowly and highly sensitive to training parameters.
+The results are not interesting to share but the insights are, see the next section.
+
+## Strengths and weaknesses of neural ODEs
+
+The weaknesses are unfortunately quite present even when working with toy examples:
+
+**Numerical instability and noise sensitivity** - 
+Even small kinks in the neural network fit propagate when integrated.
+Fitting the model for simple problems require a lot of learning tuning.
+Added noise, which is normally handled by filtering signals in traditional engineering,
+was something the models were not really fit to handle.
+
+**Slow** - 
+Even with the adjoint sensitivity method you are still solving multiple ODEs, which does not scale well. 
+While playing around with some time series examples it became obvious that throwing an RNN at problem was so much faster during training.
+
+The strengths are definitely in irregularly sampled data and physics-informed neural ODEs.
+As a rule of thumb the models should be small, interpretable and come with structure informed by the problem.
+The best problems are ones where one already knows the majority of the structure of the ODE
+and only a few parameters or non-linearities are unknown.
