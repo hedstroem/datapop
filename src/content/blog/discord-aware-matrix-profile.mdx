@@ -1,0 +1,249 @@
+---
+title: 'Discord Aware Matrix Profile'
+description: 'Fast subsequence anomaly detection'
+pubDate: 2025-11-17
+tags: ['statistics']
+---
+
+import ImageGallery from '../../components/ImageGallery.astro';
+
+One potential tool when analyzing time series is Mueen's Algorithm for Similarity Search (MASS).
+It is an efficient way of calculating **z-score distance** between a query $q$, a subsection, and the rest of the time series $T$.
+
+```python
+import numpy as np
+import stumpy
+
+T = np.array([0,0,1,1,-1,-1,1,0,0,1,-1,0]).astype(float)
+query = np.array([1,-1,-1]).astype(float)
+
+dist_profile = stumpy.core.mass(query, T)
+dist_profile
+
+Output: 
+[3.  , 3.46, 1.73, 0.  , 3.  , 3.35, 0.  , 3.  , 2.45, 0.9 ]
+```
+
+Note in the above example that the query scored two exact matches.
+The first is the query itself but the second one corresponds to $[1,0,0]$,
+which is because $\frac{[1,-1,-1] - \mu([1,-1,-1])}{\sigma([1,-1,-1])} = \frac{[1,0,0] - \mu([1,0,0])}{\sigma([1,0,0])}$.
+So the similarity is based on local shape and not amplitude or absolute value.
+
+MASS uses Fourier transform (FFT) to instead of brute forcing the convolution between $q$ and $T$,
+which makes it scale well for longer sequences.
+However, what if one wanted to compare all subsequences $q_t \in T$ at start time $t$ and length $h$ against all past subsequences?
+
+This scales like $\frac{n}{2}$ ($O(n)$) where $n = |T|$, 
+which combined with the FFT complexity approximates $O(n^2log(n))$.
+While possible for shorter time series it is not sustainable for longer ones.
+This is where algorithms such as Discord Aware Matrix Profile (DAMP) comes in.
+
+## Discord Aware Matrix Profile
+
+Source:\
+https://sites.google.com/view/discord-aware-matrix-profile/home
+
+Paper:\
+https://www.cs.ucr.edu/~eamonn/DAMP_long_version.pdf
+
+Quick terminology check. A discord is an anomalous time series segment.
+
+In a nutshell the algorithm does these steps:
+* First it takes a `location_to_start_processing` parameter. 
+It isolates this length of the time series and builds a matrix profile.
+The matrix profile stores the minimum distance between a segment and its predecessors.
+Using this matrix profile the algorithm estimates a `best_so_far` value as the maximum of the minimum distances.
+This value will be used for pruning as we are interested in anomalies scoring high.
+    * The matrix profile is built using both backward passes and pruning forward passes.
+    The intuition behind forward passes is that if upcoming future subsequences are similar to the
+    current query $q$ then they will by definition not be anomalous. This is controlled using `best_so_far`.
+    The forward passes require a `lookahead` parameter, 
+    which if unassigned becomes the closest power of 2 matching 16 subsequence lengths $h$.
+    If `lookahead = 0` then the algorithm is truly incremental but slower because of no pruning.
+* After getting the initial matrix profile we building the rest of the matrix profile.
+The setup is similar with both backward and forward pruning passes.
+The difference is that the searches follow a procedure:
+    * If pruned, set matrix profile distance as previous distance minus a small number.
+    * If not pruned, continue.
+    * Perform a backward pass of a fixed length to see if $q$ is anomalous i.e. `min_distance` > `best_so_far`.
+    * If not anomalous, do backward passes of doubling length until all past is checked or anomalous.
+    * Do pruning forward pass.
+
+This algorithm is called discord aware because of it is built around maximing `best_so_far`
+and not bothering to compute distances for segments that are similar to others.
+It is based on the assumption that closed looking segments occur closer in space / time.
+This is my own understanding of the DAMP 2.0 algorithm.
+
+The original implementation is for MATLAB only.
+There are Python ports but here is my version:
+```python
+import numpy as np
+import stumpy # MASS algorithm
+
+def DAMP(
+        T, 
+        subseq_len, 
+        location_to_start_processing,       
+        lookahead = None
+    ):
+    
+    T = np.asarray(T).flatten()
+    n = len(T)
+
+    # Default lookahead
+    if lookahead is None:
+        next_pow = int(2 ** np.ceil(np.log2(16 * subseq_len)))
+        lookahead = next_pow
+
+    # Initialization
+    Left_MP = np.zeros(n)
+    best_so_far = -np.inf
+    bool_vec = np.ones(n, dtype=bool)
+
+    # Prefix section (first 16S)
+    end_prefix = min(
+        location_to_start_processing + 16 * subseq_len,
+        n - subseq_len + 1
+    )
+    for i in range(location_to_start_processing, end_prefix + 1):
+        if not bool_vec[i-1]: # if pruned, forward fill
+            Left_MP[i-1] = Left_MP[i-2] - 1e-5
+            continue
+
+        query = T[i-1:i-1 + subseq_len]
+
+        # Backward
+        dist_profile = stumpy.core.mass(query, T[:i])
+        Left_MP[i-1] = np.min(dist_profile)
+        best_so_far = max(best_so_far, Left_MP[i-1])
+
+        # Forward pruning
+        if lookahead != 0:
+            start_mass = min(i + subseq_len, n)
+            end_mass = min(start_mass + lookahead - 1, n)
+
+            if (end_mass - start_mass + 1) > subseq_len:
+                dp = stumpy.core.mass(query, T[start_mass-1:end_mass])
+                mask = dp < best_so_far
+                idxs = np.where(mask)[0] + start_mass - 1
+                bool_vec[idxs] = False
+
+    best_so_far_calibration = 1.0*best_so_far
+
+    # Remaining data
+    for i in range(end_prefix + 1, n - subseq_len + 2):
+        if not bool_vec[i-1]: # if pruned, forward fill
+            Left_MP[i-1] = Left_MP[i-2] - 1e-5
+            continue
+
+        query = T[i-1:i-1 + subseq_len]
+
+        # Init
+        approx_dist = np.inf
+        X = int(2 ** np.ceil(np.log2(8 * subseq_len)))
+        flag = True
+        expansion = 0
+
+        # Backward
+        while approx_dist >= best_so_far:
+            start_idx = i - X + 1 + expansion * subseq_len
+            # Check entire time series (last check)
+            if start_idx < 1:
+                approx_dist = np.min(stumpy.core.mass(query, T[:i]))
+                Left_MP[i-1] = approx_dist
+                best_so_far = max(best_so_far, approx_dist)
+                break
+
+            if flag: # If first pass
+                flag = False
+                approx_dist = np.min(stumpy.core.mass(query, T[i-X:i]))
+            else: # else, use doubling distance
+                X_start = i - X + 1 + expansion * subseq_len
+                X_end = i - X//2 + expansion * subseq_len
+                approx_dist = np.min(stumpy.core.mass(query, T[X_start-1:X_end]))
+
+            if approx_dist < best_so_far: # If non-anomalous
+                Left_MP[i-1] = approx_dist
+                break
+            else: # else, double search distance
+                X *= 2
+                expansion += 1
+
+        # Forward pruning
+        if lookahead != 0:
+            start_mass = min(i + subseq_len, n)
+            end_mass = min(start_mass + lookahead - 1, n)
+
+            if (end_mass - start_mass + 1) > subseq_len:
+                dp = stumpy.core.mass(query, T[start_mass-1:end_mass])
+                mask = dp < best_so_far
+                idxs = np.where(mask)[0] + start_mass - 1
+                bool_vec[idxs] = False
+
+    return Left_MP, best_so_far_calibration
+```
+
+To test the algorithm we can download some [heart arrythmia data from Kaggle](https://www.kaggle.com/datasets/protobioengineering/mit-bih-arrhythmia-database-modern-2023?select=100_annotations_1.csv).
+In this demo we pick patient 100 and crop the ECG (MLII) from index 55k to 77k, which includes two heartbeats labeled A for arrythmic.
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/damp/damp_1.png",
+      alt: "...",
+      caption: "ECG data with anomaly starts (arrythmic heartbeats)"
+    },
+    {
+      src: "/images/damp/damp_2.png",
+      alt: "...",
+      caption: "Close up of an anomaly"
+    },
+  ]}
+  columns={2}
+  layout="carousel"
+/>
+
+The number of indices between heartbeats is approximately 300, 
+which we use to initially configure the subsequence length to $70\% \cdot 300 = 210$.
+We use the first 5000 data points for constructing the initial matrix profile with default lookahead.
+This yields the following matrix profile:
+
+<ImageGallery 
+  images={[
+    {
+      src: "/images/damp/damp_3.png",
+      alt: "...",
+      caption: "DAMP in action"
+    },
+    {
+      src: "/images/damp/damp_4.png",
+      alt: "...",
+      caption: "Close up of the first anomaly"
+    },
+    {
+      src: "/images/damp/damp_5.png",
+      alt: "...",
+      caption: "Close up of the second anomaly"
+    },
+  ]}
+  columns={2}
+  layout="carousel"
+/>
+
+There are a few values above the best so far line but the highest ($>10$) correspond to the two anomalous heartbeats.
+The long stretches of flat profile is because of the forward fill from pruning.
+Running these 25k data points took around 5 seconds with default lookahead.
+Forcing the algorithm to use no lookahead takes around 25 seconds and produces the following matrix profile:
+
+![...](/images/damp/damp_6.png)
+
+If we overlay the two we see that the discord aware algorithm makes us ignore the peak at e.g. 14800:
+
+![...](/images/damp/damp_7.png)
+
+This is by design but one can slightly relax the pruning to use `best_so_far_calibration` instead of `best_so_far`.
+Using this alternative algorithm yields more information about anomalies in relation to the calibration period,
+not only the top candidate.
+![...](/images/damp/damp_8.png)
+
+Of course, since we are doing less pruning the runtime increases slightly to 6-7 seconds.
