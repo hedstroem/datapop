@@ -1,0 +1,117 @@
+---
+title: 'FAIR data principles'
+description: 'Not all data needs to be FAIR, but almost all data benefit from some degree of FAIR'
+pubDate: 2025-12-09
+tags: ['leadership']
+---
+
+Source: https://www.go-fair.org/fair-principles/
+
+Taking notes on what organizations can learn from the FAIR data principles.\
+FAIR stands for **F**indable, **A**ccessible, **I**nteroperable and **R**eusable.
+
+The principles refer to three types of entities: data (or any digital object), 
+metadata (information about that digital object) and infrastructure.
+For instance, principle F4 defines that both metadata and data are registered
+or indexed in a searchable resource (the infrastructure component).
+
+## Findable
+
+*The first step in (re)using data is to find them.*
+*Metadata and data should be easy to find both for humans and computers.*
+*Machine-readable metadata are essential for automatic discovery of datasets and services,*
+*so this is an essential component of the FAIRification process.*
+
+[F1. (Meta)data are assigned a globally unique and persistent identifier.](https://www.go-fair.org/fair-principles/f1-meta-data-assigned-globally-unique-persistent-identifiers/)
+
+[F2. Data are described by rich metadata.](https://www.go-fair.org/fair-principles/f2-data-described-rich-metadata/)
+
+[F3. Metadata clearly and explicitly include the identifier of the data they describe.](https://www.go-fair.org/fair-principles/f3-metadata-clearly-explicitly-include-identifier-data-describe/)
+
+[F4. (Meta)data are registered or indexed in a searchable resource.](https://www.go-fair.org/fair-principles/f4-metadata-registered-indexed-searchable-resource/)
+
+For an organization the mapping of data, metadata and infrastructure must start from the data/system owners.
+Take an example of sales numbers.
+Sales are typically recorded in an ERP system. 
+This system has a owner who is responsible for how it is used in the company.
+Because sales numbers are also used for bookkeeping and projections in budgets there are formal processes for aggregation.
+In a less data-mature organization the raw data is extracted from the ERP and aggregated in Excel.
+If the organization is data-mature then this is done by an automated pipeline which spits out the "truth",
+either as an on-demand query or into a database.
+In either case, the data owner is the person responsible for the final Excel or automated pipeline output.
+
+In this example, one *should* be able to search the indexing resource for "sales numbers" 
+and find a reference for the bookkeeping-sufficient truth.
+The metadata should include how the refined data is produced and who to ask (data owner) if there are any follow-up questions.
+The metadata should also include how to access the source system in case the raw data needs be reviewed (e.g. sometimes corrupt entries skew aggregates).
+
+
+## Accessible
+
+*Once the user finds the required data, they need to know how they can be accessed,*
+*possibly including authentication and authorisation.*
+
+[A1. (Meta)data are retrievable by their identifier using a standardized communications protocol.](https://www.go-fair.org/fair-principles/metadata-retrievable-identifier-standardised-communication-protocol/)
+
+[A1.1. The protocol is open, free and universally implementable](https://www.go-fair.org/fair-principles/a1-1-protocol-open-free-universally-implementable/)
+
+[A1.2. The protocol allows for an authentication and authorisation procedure, where necessary.](https://www.go-fair.org/fair-principles/a1-2-protocol-allows-authentication-authorisation-required/)
+
+[A2. Metadata are accessible, even when the data are no longer available](https://www.go-fair.org/fair-principles/a2-metadata-accessible-even-data-no-longer-available/)
+
+The core message of A1 is simply to avoid complex or proprietary (read: expensive) solutions to accessing your organizational data and metadata.
+This does not mean that one should avoid have authorization processes, they are absolutely necessary to protect sensitive information.
+
+An interesting take that A2 brings is that a data-mature organizations should store its data history and lineage in metadata.
+Perhaps a business concept become deprecated but bubbles up in discussions 5 years later.
+Or ideas that have already been tested and to be avoided again.
+Recorded history provides a map for newer employees who lack the context of past discussions.
+
+
+## Interoperable
+
+*The data usually needs to be integrated with other data.*
+*In addition, the data need to interoperate with applications or workflows for analysis, storage or processing.*
+
+[I1. (Meta)data use a formal, accessible, shared and broadly applicable language for knowledge representation.](https://www.go-fair.org/fair-principles/i1-metadata-use-formal-accessible-shared-broadly-applicable-language-knowledge-representation/)
+
+[I2. (Meta)data use vocabularies that follow FAIR principles.](https://www.go-fair.org/fair-principles/i2-metadata-use-vocabularies-follow-fair-principles/)
+
+[I3. (Meta)data include qualified references to other (meta)data.](https://www.go-fair.org/fair-principles/i3-metadata-include-qualified-references-metadata/)
+
+For an organization this principle mainly rhymes with master data.
+That is, shared business concepts like customers, product codes, currencies, supplier numbers, etc.
+Creating and maintaining master data can be a tedious process because typically
+legacy integrations betweens systems and processes come with their own unique translation layers and concept representations.
+Having a map of the web of core business concepts can be a great cheat sheet for new and old employees.
+
+
+## Reusable
+
+*The ultimate goal of FAIR is to optimize the reuse of data.*
+*To achieve this, metadata and data should be well-described so that they can be replicated and/or combined in different settings.*
+
+[R1. (Meta)data are richly described with a plurality of accurate and relevant attributes.](https://www.go-fair.org/fair-principles/r1-metadata-richly-described-plurality-accurate-relevant-attributes/)
+
+[R1.1. (Meta)data are released with a clear and accessible data usage license.](https://www.go-fair.org/fair-principles/r1-1-metadata-released-clear-accessible-data-usage-license/)
+
+[R1.2. (Meta)data are associated with detailed provenance.](https://www.go-fair.org/fair-principles/r1-2-metadata-associated-detailed-provenance/)
+
+[R1.3. (Meta)data meet domain-relevant community standards.](https://www.go-fair.org/fair-principles/r1-3-metadata-meet-domain-relevant-community-standards/)
+
+To make data reusable the metadata must provide appropriate context.
+When can you use these numbers? For what purposes? Who is the data owner?
+Given that the data are findable, accessible and interoperable;
+one still needs to know the factors that impact the level of data quality.
+An organization should also provide clear guidelines for how to aggregate insights.
+For example, when talking about how much product was shipped in the year,
+do you use the data when it was loaded on a truck or the date it was loaded off at the customer location?
+
+## Conclusion
+
+FAIR provides a framework for reproducible, scientific data.
+
+For an organization one should apply that framing to the level where it is applicable.
+If analytics or research is a critical part of your operations then following FAIR principles ensures fewer blockers.
+There is a cost-benefit analysis that should be performed based on the number of interested consumers, business value and potential for innovation.
+*Not all data needs to be FAIR, but almost all data benefit from some degree of FAIR.*
