@@ -1,0 +1,134 @@
+---
+title: 'Plotly visuals'
+description: 'Making it easy to find for my future self'
+pubDate: 2025-12-11
+tags: ['learning']
+---
+
+All my career I have been using `matplotlib` but due to the clunky rendering of transparent backgrounds I have forced myself to learn `plotly`.
+The interface is about as (il)logical as matplotlib and the documentation is great.
+It is the committment to muscle-memory that by far has been the most painful part of the process.
+Same story as learning to use `polars` instead of `pandas`.
+
+Here are the imports:
+
+```python
+import polars as pl
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+PLOT_BLUE = "rgba(36,140,255,1.0)"
+PLOT_RED = "rgba(247,62,80,1.0)"
+PLOT_SECONDARY = "violet"
+PLOT_TERTIARY = "gold"
+
+def create_fig():
+    fig = go.Figure()
+    fig.update_layout(
+        template="plotly_white", 
+        width = 1000, 
+        height = 300,
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        margin=dict(l=20, r=20, t=20, b=20),
+        legend = {
+            "bgcolor":"rgba(255,255,255,0.75)",
+            "font":{"color":"black"}
+        },
+        font = {"color":"grey"},
+    )
+    fig.update_xaxes(tickfont=dict(color='grey'), gridcolor="rgba(128,128,128,0.3)")
+    fig.update_yaxes(tickfont=dict(color='grey'), gridcolor="rgba(128,128,128,0.3)")
+    return fig
+```
+
+### On the fly
+
+```python
+x = np.cumsum(np.random.randn(1000))
+fig = px.line(y = x)
+fig = create_fig(fig)
+fig.show()
+```
+
+![...](/images/plotly/plotly_1.png)
+
+### Minimum viable plot
+
+```python
+x = np.cumsum(np.random.randn(1000))
+fig = create_fig()
+fig.add_trace(
+    go.Scatter(
+        y = x,
+        mode = "lines",
+        line = {"color":PLOT_BLUE}
+    )
+)
+fig.show()
+```
+
+![...](/images/plotly/plotly_2.png)
+
+### Some additional decorators
+
+```python
+x = np.cumsum(np.random.randn(1000))
+fig = create_fig()
+fig.update_layout(
+    xaxis = {"title":"x"},
+    yaxis = {"title":"y"}
+)
+fig.add_trace(
+    go.Scatter(
+        y = x,
+        mode = "markers",
+        marker = {"color":PLOT_RED, "size":abs(x), "line":{"width":0}},
+        showlegend = False
+    )
+)
+fig.add_trace(
+    go.Scatter(
+        y = x,
+        mode = "lines",
+        line = {"color":PLOT_TERTIARY},
+        showlegend = False
+    )
+)
+fig.show()
+```
+
+![...](/images/plotly/plotly_3.png)
+
+### Subplots
+
+```python
+x = np.cumsum(np.random.randn(1000))
+fig = make_subplots(rows = 2, cols = 1)
+fig = create_fig(fig)
+fig.update_layout(height = 500)
+fig.add_trace(
+    go.Scatter(
+        y = x,
+        mode = "lines",
+        line = {"color":PLOT_BLUE},
+        showlegend = False
+    ),
+    row = 1,
+    col = 1
+)
+fig.add_trace(
+    go.Histogram(
+        x = x,
+        nbinsx = 30,
+        marker = {"color":PLOT_BLUE, "line":{"color":"black", "width":1}},
+        showlegend = False
+    ),
+    row = 2,
+    col = 1
+)
+fig.show()
+```
+
+![...](/images/plotly/plotly_4.png)
