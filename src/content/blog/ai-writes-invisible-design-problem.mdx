@@ -1,0 +1,274 @@
+---
+title: 'AI writes: The Invisible Design Problem'
+description: 'Drafted by ChatGPT, adjusted by Claude'
+pubDate: 2025-12-12
+tags: ['AI-writes']
+---
+
+*Note from me:*\
+I normally use ChatGPT \& Claude for brainstorming or learning about new topics.\
+Here I let them author this post. I only seeded the idea, then let ChatGPT draft and Claude adjust.
+
+No wonder people can output so much on LinkedIn these days...
+
+---
+
+# **The Invisible Design Problem**
+
+For years, tech teams have talked about the blurred lines between roles. 
+Developers who do ops. Designers who write research plans. Researchers who moonlight as product strategists. 
+But one line stays especially blurry — and carries real weight for how products take shape:
+
+**Product managers are increasingly performing design work.**
+
+Sometimes intentionally. Often accidentally. And almost always without acknowledging that the shift is happening.
+
+This isn't a turf war argument. The pattern is simply *true*, and it's reshaping how digital products are conceived, scoped, and delivered. 
+Understanding it matters for anyone building software in 2025 — because when design decisions happen without design expertise, everyone loses.
+
+---
+
+## **The Roots of the Blur**
+
+You can trace the trend to a few structural forces:
+
+
+### **1. Teams ship faster than design scales**
+
+Design teams rarely grow at the same rate as engineering and product. 
+When deadlines loom and designers are stretched thin, PMs fill the vacuum with "quick sketches,"
+flow diagrams, requirements that imply UI, or decision-making that effectively defines the user experience.
+
+
+### **2. Agile and product frameworks invite PMs into solution space**
+
+Scrum, SAFe, dual-track discovery — pick your favorite (or least favorite) framework.
+All encourage PMs to articulate what users need, prioritize solutions, and create crisp acceptance criteria. 
+But in practice, those responsibilities bleed into UX shaping.
+
+User stories like *"As a customer, I want to see my monthly spending broken down by category so that…"*
+often come bundled with a PM's mental storyboard of how it should look.
+What begins as requirements ends as a sketch. 
+And that sketch becomes a screenshot. 
+And that screenshot becomes a real interface.
+
+
+### **3. Organizations increasingly seek "full-stack" product talent**
+
+LinkedIn, for example, recently shifted its product career track to emphasize
+"full-stack builders" — people who can design, research, manage, and influence the entire product lifecycle.
+Industry blogs and conferences have been pushing variants of the "UX-minded product manager" concept for years.
+When the market tells PMs that being part-designer increases their value, 
+you'll see more PMs stepping into design territory.
+
+
+### **4. Many PMs come from business backgrounds with no design training**
+
+Here's the uncomfortable truth that few articles mention: 
+A significant portion of product managers didn't start in tech. 
+They pivoted from business analysis, process optimization, change management, or economics.
+They're smart, strategic thinkers who understand stakeholder management and business logic.
+
+But they often know little to nothing about interaction design, 
+visual hierarchy, cognitive load, or human-centered research methods.
+This creates two distinct problems:
+
+**The Confident Amateur:** 
+A PM who's read a few UX articles and thinks they understand design principles
+well enough to make UI decisions. They're aware of design as a discipline
+but overestimate their competence.
+
+**The Unaware Architect:** 
+A former business analyst or process developer who doesn't realize that "defining the solution" *is* design work. 
+They see their detailed requirement specifications as simply being thorough,
+not understanding that when they dictate how information should be organized or how a workflow should unfold,
+they're making interaction design choices.
+
+The second group is often more problematic because they're operating without any awareness of the boundary.
+They're not overstepping — they don't see a boundary to begin with.
+
+---
+
+## **PMs Don't Just Influence Design — They Shape It**
+
+One of the most insightful findings from Nielsen Norman Group's
+research on PM and UX ambiguity is that **PMs often believe they "own" parts of the design process**
+, especially early-stage conceptual design and user definition. 
+Designers, meanwhile, assume they own it. That difference in perception *is the blur*.
+
+A PM's influence on design usually shows up in four ways:
+
+1. **Problem Framing** — PMs define which user problems matter. This inherently shapes the design.
+2. **Constraints** — Budgets, timelines, and scope boundaries force certain UX paths.
+3. **Narrative** — PMs articulate the story: who the user is, what their journey looks like, and what's meaningful.
+4. **Artifacts** — Low-fi flows, feature outlines, "vision decks," or even Miro boards that start to look suspiciously like wireframes.
+
+You can say "PMs don't design," but the truth is that **framing the solution and shaping the narrative *is design work***.
+The challenge isn't that PMs think about the user experience — they should.
+The challenge is when they *decide* the user experience without design expertise guiding those decisions.
+
+---
+
+## **The BA Mindset: Process Logic vs. Human Behavior**
+
+When PMs come from business analysis backgrounds, they bring a specific lens that often conflicts with user-centered design:
+
+**Business analysts think in:**
+- Process flows and system states
+- Data models and business rules
+- Edge cases and exception handling
+- Efficiency and risk mitigation
+
+**Designers think in:**
+- User journeys and mental models
+- Cognitive load and information hierarchy
+- Emotional responses and trust signals
+- Clarity and human comprehension
+
+When a BA-turned-PM creates a "user flow," it often reflects *system logic* rather than *human behavior*.
+The result? Interfaces that are technically complete but feel mechanical, confusing, or exhausting to use.
+
+The spreadsheet makes sense. The user experience doesn't.
+
+---
+
+## **How to Tell If This Is Happening to You**
+
+Here are the red flags that design decisions are happening without design leadership:
+
+- **Requirements documents that specify UI elements**<br>
+"The dashboard should show a card for each category with the total in bold at the top"</br>
+- **PMs presenting wireframes in planning meetings**<br>
+Even "rough sketches" are design artifacts</br>
+- **User stories that describe solutions, not problems**<br>
+"As a user, I want a dropdown menu" vs. "As a user, I want to quickly find my account type"</br>
+- **Engineers asking designers to "make it look nice"**<br>
+Meaning the interaction model is already decided</br>
+- **Designers learning about features the week before launch**<br>
+Because the "thinking" was done without them</br>
+- **Products that work but feel clunky**<br>
+Technically functional, humanly frustrating</br>
+
+If you nodded at three or more of these, your team is experiencing design by proxy.
+
+---
+
+## **The Real Cost of Accidental Design**
+
+This isn't just about hurt feelings or territorial boundaries. 
+There are tangible consequences:
+
+### **1. Products that feel mechanical instead of human**
+
+When design happens through a business logic lens, 
+you get interfaces that reflect database structures,
+not how people actually think or work.
+Everything is "correct" but nothing feels intuitive.
+
+### **2. Demoralized designers who become validators**
+
+By the time design sees the problem, the solution space is already shaped.
+Designers react instead of lead. This is why good designers leave teams where they're treated as "UI decorators."
+
+### **3. Technical debt from poorly conceived patterns**
+
+UI patterns that weren't thought through by someone who understands interaction design create ongoing maintenance problems. 
+The codebase accumulates band-aids for fundamental experience issues.
+
+### **4. Missed opportunities to solve the actual problem**
+
+When PMs jump to solutions based on business requirements rather than user research,
+teams often build the wrong thing efficiently. The requirements were met. 
+The user's real need wasn't.
+
+---
+
+## **But Wait — Should PMs Ever Do Design Work?**
+
+Here's a reasonable counterargument: 
+In small teams, early-stage startups, or resource-constrained environments, 
+having PMs sketch low-fidelity concepts can actually *accelerate* collaboration.
+It gives designers something concrete to react to and helps align the team quickly.
+
+The problem isn't that PMs design. It's when they:
+- Design *badly* (without understanding core principles)
+- Design *without awareness* (thinking they're just "being thorough")
+- Design *as final decisions* (not as conversation starters)
+
+There's a meaningful difference between "Here's a rough idea to discuss" and "Here's what we're building."
+
+And yes, designers also bear some responsibility here. 
+When design teams can't articulate their strategic value beyond
+"making things pretty" or fail to understand business constraints,
+it's easier for PMs to justify stepping into that space. 
+Design needs to earn its seat at the table by demonstrating business acumen, not just craft skill.
+
+---
+
+## **What Healthy Collaboration Actually Looks Like**
+
+The solution isn't to police boundaries but to clarify them — and to acknowledge when you're crossing into another discipline:
+
+**PMs define:**
+- The problem and its business context
+- Success criteria and metrics
+- Constraints (budget, timeline, technical)
+- Strategic priorities
+
+**Designers define:**
+- The experience and interaction patterns
+- Information architecture and content hierarchy
+- Visual design and interface consistency
+- How the solution feels to use
+
+**Engineers define:**
+- Technical feasibility and implementation approach
+- Performance characteristics
+- System behavior and error handling
+- Quality and maintainability
+
+Where things overlap, transparency is everything:
+
+> "I'm sketching this to communicate intent, not to dictate the actual UX."
+>
+> "Here's the technical constraint; let's explore design options that fit."
+>
+> "This requirement implies a specific UI. Let's revisit the problem first."
+
+The key is making design decision-making visible and intentional, not accidental.
+
+---
+
+## **The Uncomfortable Question**
+
+There's a bigger issue lurking beneath all this:\
+**Is this trend partly because design hasn't made its strategic value clear enough?**
+
+If PMs are stepping into design territory unchecked,
+is it because organizations fundamentally don't understand what design contributes beyond aesthetics?
+Have design teams failed to demonstrate that good interaction design directly impacts business outcomes?
+
+When leadership sees design as "making the product pretty" rather than "making the product work for humans",
+they'll deprioritize it. And when design is deprioritized, someone else fills that space.
+
+Usually the PM.
+
+---
+
+## **The Takeaway**
+
+PMs are designing. Often without training. Sometimes without awareness.
+And almost always without teams acknowledging that design decisions
+are being made in places other than the design function.
+
+This isn't about shrinking anyone's role or drawing rigid boundaries.
+It's about recognizing that **design expertise matters**,
+and that well-intentioned people making design decisions without that
+expertise create real problems — for users, for teams, and for products.
+
+The modern product team isn't defined by clean lines.
+It's defined by intentional collaboration and honest conversations
+about who's qualified to make which decisions.
+Everyone should think about the user experience.
+Not everyone should decide it.
+And the more we name these dynamics explicitly, the better our products — and our teams — will be.

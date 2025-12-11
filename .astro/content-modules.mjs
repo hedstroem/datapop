@@ -21,5 +21,7 @@ export default new Map([
 ["src/content/blog/sensitivity-analysis.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fblog%2Fsensitivity-analysis.mdx&astroContentModuleFlag=true")],
 ["src/content/blog/stochastic-differential-equations.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fblog%2Fstochastic-differential-equations.mdx&astroContentModuleFlag=true")],
 ["src/content/blog/supply-chain-modeling.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fblog%2Fsupply-chain-modeling.mdx&astroContentModuleFlag=true")],
-["src/content/blog/where-is-the-data-science.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fblog%2Fwhere-is-the-data-science.mdx&astroContentModuleFlag=true")]]);
+["src/content/blog/where-is-the-data-science.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fblog%2Fwhere-is-the-data-science.mdx&astroContentModuleFlag=true")],
+["src/content/blog/ai-writes-product-manager-design.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fblog%2Fai-writes-product-manager-design.mdx&astroContentModuleFlag=true")],
+["src/content/blog/ai-writes-invisible-design-problem.mdx", () => import("astro:content-layer-deferred-module?astro%3Acontent-layer-deferred-module=&fileName=src%2Fcontent%2Fblog%2Fai-writes-invisible-design-problem.mdx&astroContentModuleFlag=true")]]);
 		
