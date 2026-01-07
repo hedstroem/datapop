@@ -1,0 +1,126 @@
+---
+title: 'Working in a low-data environment'
+description: 'From years of experience in a traditional industry'
+pubDate: 2026-01-07
+tags: ['leadership']
+---
+
+Something has bothered me since I wrote "Where is the data science (organizationally)?".
+It is the phrase *"A data scientist require a relatively mature ecosystem to thrive"* and the following itemized list.
+Traditional industries, or entirely new ventures, are typically data-deficient. 
+There is not enough free data that can be absorbed and coverted into nutricious insights.
+
+In my checklist for this upcoming year I wrote to myself to do less firefighting, ducttaping
+and not to compensate for poor planning with ad-hoc problem solving.
+Things that tend to happen more often in a low-data environment.
+See this as a guideline for how to act.
+
+
+## Reframe yourself from a modeling expert to a decision enabler
+
+In low-data environments, the biggest mistake is trying to force predictive models too early.
+
+Instead value often comes from:
+* Structuring problems
+* Creating data where none existed
+* Reducing uncertainty, not "optimizing"
+
+Think: *What decision does someone struggle to make today, and why?*
+
+
+## Treat data creation as part of the project (not a prerequisite)
+
+In traditional industries, data engineering and data product design has to go hand-in-hand with data science.
+
+Concrete tactics:
+* Standardize definitions ("What exactly is a delay?", "What is scrap?")
+* Design simple logging schemas (even spreadsheets / forms)
+* Instrument processes with:
+    * Sensor data
+    * Operator inputs
+    * Event timestamps
+
+If you don’t help define and create data, no one else will.
+
+
+## Start with descriptive → diagnostic → predictive
+
+Skipping steps **kills credibility**.
+1. Descriptive: *What is happening?*
+2. Diagnostic: *Why is it happening?*
+3. Predictive: *What will happen?*
+4. Prescriptive: *What should we do?*
+
+In low-data settings, stages 1–2 alone often unlock value.
+
+
+## Use “low-data” techniques early
+
+High business value does not require deep learning.
+
+Effective early tools:
+* Rules & heuristics
+* Threshold-based alerts
+* Pareto analysis (80/20)
+* Time-series decomposition
+* Simple regressions
+* Bayesian updating (very powerful with sparse data)
+* Simulation (often underused!)
+
+## Earn trust by solving boring but painful problems
+
+Don’t sell AI - sell relief.
+
+Examples:
+* "Why does this take 3 weeks instead of 1?"
+* "Which 10 suppliers cause 70% of exceptions?"
+* "Where do planners override the system most?"
+
+Once trust is built, better data follows.
+
+## Your role is to find signal in the noise
+
+Anyone or anything (read: LLMs) can spit out use cases as brainstorming is becoming increasingly democratized.
+You can weigh in on what to pursue based on data availablity, "modelability" and future use case relevance.
+
+### Use cases as proposed by an LLM
+
+No more is the data scientist the only person in the room who can formulate reasonable use cases:
+
+| Domain | Use Case | Solution Type | Business Value Driver |
+|--------|----------|---------------|----------------------|
+| **Production / Manufacturing** | OEE decomposition & analysis | Descriptive analytics | Creates shared performance language across teams |
+| | Downtime root-cause analysis | Statistical analysis | Reduces unplanned downtime and lost production |
+| | Predictive maintenance | Survival analysis / ML | Prevents costly equipment failures |
+| | Yield loss analysis | Regression / causal inference | Improves first-pass yield and material efficiency |
+| | Process window optimization | DOE + statistical modeling | Increases output consistency and reduces defects |
+||||||
+| **Logistics / Operations** | Delay root-cause attribution | Rule-based + statistical analysis | Removes operational ambiguity and accountability gaps |
+| | Bottleneck identification | Flow / queuing analysis | Increases system throughput |
+| | Shipment ETA prediction | Time-series forecasting / ML | Improves customer communication and trust |
+| | Capacity scenario planning | Discrete-event simulation | Supports capital investment decisions |
+||||||
+| **Supply Chain** | Forecast bias detection | Statistical diagnostics | Improves demand planning discipline |
+| | Safety stock optimization | Probabilistic inventory modeling | Balances service level with working capital |
+| | Demand segmentation | Clustering / classification | Simplifies planning complexity |
+| | Supply disruption scenarios | Monte Carlo simulation | Enables proactive resilience planning |
+||||||
+| **Procurement** | Spend analysis & categorization | Descriptive analytics + clustering | Identifies immediate cost savings opportunities |
+| | Supplier risk scoring | Multi-criteria scoring + external data | Prevents supply disruptions |
+| | Price variance analysis | Regression / benchmarking | Strengthens negotiation leverage |
+| | Contract compliance monitoring | Anomaly detection / rules engine | Prevents revenue and margin leakage |
+||||||
+| **Sales** | Pipeline health diagnostics | Descriptive analytics | Improves forecast accuracy and visibility |
+| | Deal loss root-cause analysis | Classification / text mining | Enables targeted coaching and process improvement |
+| | Account segmentation & targeting | Clustering | Optimizes resource allocation |
+| | Win probability scoring | Logistic regression / ML | Prioritizes high-value opportunities |
+||||||
+| **Marketing** | Marketing mix modeling (MMM) | Econometric regression | Quantifies channel ROI without user-level tracking |
+| | Campaign incrementality testing | Causal inference (A/B, geo-experiments) | Proves true marketing impact vs. baseline |
+| | Customer segmentation | Clustering / RFM analysis | Drives personalized messaging and offers |
+| | Churn prediction & driver analysis | Survival analysis / classification | Enables proactive retention strategies |
+||||||
+| **Innovation / R&D** | Experiment prioritization | Bayesian optimization / multi-armed bandit | Maximizes learning velocity per experiment |
+| | R&D portfolio analytics | Descriptive analytics / stage-gate metrics | Focuses investment on high-potential projects |
+| | Design of experiments (DOE) | Factorial / response surface design | Accelerates optimization with fewer tests |
+| | Technical document mining | NLP / knowledge graphs | Surfaces hidden insights from unstructured data |
