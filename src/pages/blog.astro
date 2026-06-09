@@ -114,7 +114,7 @@ const treeData = posts.reduce((acc, post) => {
             data-description={post.data.description.toLowerCase()}
             data-tags={tagList.toLowerCase()}
           >
-            <a href={`/blog/${post.slug}`} class="absolute inset-0 z-10" aria-label={post.data.title}></a>
+            <a href={`/blog/${post.id}`} data-astro-prefetch class="absolute inset-0 z-10" aria-label={post.data.title}></a>
             <div
               class="absolute -inset-4 rounded-lg bg-gradient-to-r from-blue-50 to-purple-50
                      dark:from-blue-950/20 dark:to-purple-950/20 opacity-0
@@ -166,7 +166,7 @@ const treeData = posts.reduce((acc, post) => {
                   data-description={post.data.description.toLowerCase()}
                   data-tags={tagList.toLowerCase()}
                 >
-                  <a href={`/blog/${post.slug}`} class="group">
+                  <a href={`/blog/${post.id}`} data-astro-prefetch class="group">
                     <h3 class="font-display text-xl font-normal dark:font-thin mb-0.5 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
                       {post.data.title}
                     </h3>
@@ -288,22 +288,6 @@ const treeData = posts.reduce((acc, post) => {
       }
     }
 
-    // Preload blog posts on hover
-    function setupPreloading() {
-      const allLinks = document.querySelectorAll('a[href^="/blog/"]');
-      allLinks.forEach(link => {
-        link.addEventListener('mouseenter', () => {
-          const href = link.getAttribute('href');
-          if (href && !document.querySelector(`link[rel="prefetch"][href="${href}"]`)) {
-            const prefetchLink = document.createElement('link');
-            prefetchLink.rel = 'prefetch';
-            prefetchLink.href = href;
-            document.head.appendChild(prefetchLink);
-          }
-        });
-      });
-    }
-
     // Event listeners
     listViewBtn.addEventListener('click', () => setView('list'));
     treeViewBtn.addEventListener('click', () => setView('tree'));
@@ -312,6 +296,5 @@ const treeData = posts.reduce((acc, post) => {
 
     // Initialize
     setView(currentView);
-    setupPreloading();
   </script>
 </Layout>

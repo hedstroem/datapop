@@ -1,4 +1,4 @@
-﻿@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/400.css';
 @import '@fontsource/inter/500.css';
 @import '@fontsource/inter/600.css';
 @import '@fontsource/bricolage-grotesque/400.css';
@@ -6,16 +6,33 @@
 @import '@fontsource/bricolage-grotesque/800.css';
 @import '@fontsource/geist-mono/400.css';
 @import 'katex/dist/katex.min.css';
+@import 'tailwindcss';
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@plugin '@tailwindcss/typography';
+
+/* Preserve class-based dark mode (Tailwind v4 defaults to prefers-color-scheme) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-display: 'Geist Sans', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', monospace;
+}
+
+/* Tailwind v4 changes the default border color to currentColor; restore the v3
+   default (gray-200) so existing borderless utilities keep their old look. */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+}
 
 @layer base {
   :root {
-    --font-sans: 'Inter', system-ui, sans-serif;
-    --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
-    --font-mono: 'Geist Mono', monospace;
     scrollbar-gutter: stable;
   }
 
@@ -61,4 +78,10 @@
   html.no-rounded * {
     border-radius: 0 !important;
   }
+}
+
+/* Drop the backtick pseudo-elements the typography plugin adds around inline code */
+.prose :where(code):not(:where([class~='not-prose'] *, pre *))::before,
+.prose :where(code):not(:where([class~='not-prose'] *, pre *))::after {
+  content: '';
 }

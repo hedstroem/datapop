@@ -1,4 +1,6 @@
 ﻿---
+import { getImage } from 'astro:assets';
+
 export interface Props {
   images: Array<{
     src: string;
@@ -12,15 +14,43 @@ export interface Props {
 const { images, columns = 2, layout = 'grid' } = Astro.props;
 const gridClass = columns === 1 ? 'grid-cols-1' : columns === 3 ? 'md:grid-cols-3' : 'md:grid-cols-2';
 const galleryId = `gallery-${Math.random().toString(36).substr(2, 9)}`;
+
+// Optimize the gallery images (and convert to WebP) at build time. Authors keep
+// passing root-absolute `/images/...` paths; we resolve them to the source
+// modules under `src/images/` so Astro's asset pipeline can process them.
+const imageModules = import.meta.glob<{ default: ImageMetadata }>(
+  '/src/images/**/*.{png,jpg,jpeg,gif,webp,avif}'
+);
+
+const optimizedImages = await Promise.all(
+  images.map(async (image) => {
+    const loader = imageModules['/src' + image.src];
+    if (!loader) return { ...image, width: undefined, height: undefined };
+    const mod = await loader();
+    const optimized = await getImage({ src: mod.default });
+    return {
+      ...image,
+      src: optimized.src,
+      width: optimized.attributes.width,
+      height: optimized.attributes.height,
+    };
+  })
+);
+
+// The lightbox (client script) shows the full-size source, so feed it the
+// optimized srcs too.
+const lightboxImages = optimizedImages.map(({ src, alt, caption }) => ({ src, alt, caption }));
 ---
 
 {layout === 'grid' ? (
   <div class={`grid gap-4 my-8 grid-cols-1 ${gridClass}`} id={galleryId}>
-    {images.map((image, index) => (
+    {optimizedImages.map((image, index) => (
       <figure class="space-y-2 cursor-pointer" data-index={index}>
-        <img 
-          src={image.src} 
+        <img
+          src={image.src}
           alt={image.alt}
+          width={image.width}
+          height={image.height}
           class="w-full rounded-lg shadow-md hover:shadow-lg transition-shadow"
           loading="lazy"
         />
@@ -36,12 +66,14 @@ const galleryId = `gallery-${Math.random().toString(36).substr(2, 9)}`;
   <div class="my-8 relative" id={galleryId}>
     <div class="relative overflow-hidden rounded-lg">
       <div class="flex transition-transform duration-300 ease-in-out carousel-track">
-        {images.map((image, index) => (
+        {optimizedImages.map((image, index) => (
           <div class="w-full flex-shrink-0 px-2" data-index={index}>
             <figure class="space-y-2">
-              <img 
-                src={image.src} 
+              <img
+                src={image.src}
                 alt={image.alt}
+                width={image.width}
+                height={image.height}
                 class="w-full rounded-lg shadow-md cursor-pointer"
                 loading="lazy"
               />
@@ -76,7 +108,7 @@ const galleryId = `gallery-${Math.random().toString(36).substr(2, 9)}`;
     
     <!-- Dots indicator -->
     <div class="flex justify-center gap-2 mt-4">
-      {images.map((_, index) => (
+      {optimizedImages.map((_, index) => (
         <button 
           class={`w-2 h-2 rounded-full transition-colors carousel-dot ${index === 0 ? 'bg-zinc-600 dark:bg-zinc-400' : 'bg-zinc-300 dark:bg-zinc-600'}`}
           data-index={index}
@@ -119,7 +151,7 @@ const galleryId = `gallery-${Math.random().toString(36).substr(2, 9)}`;
   <p class="lightbox-caption absolute bottom-4 left-1/2 -translate-x-1/2 text-white text-center max-w-2xl px-4"></p>
 </div>
 
-<script define:vars={{ images, galleryId, layout }}>
+<script define:vars={{ images: lightboxImages, galleryId, layout }}>
   const gallery = document.getElementById(galleryId);
   const lightbox = document.getElementById(`lightbox-${galleryId}`);
   const lightboxImage = lightbox.querySelector('.lightbox-image');
