@@ -1,47 +1,76 @@
-# Astro Starter Kit: Minimal
+# datapop
+
+A personal blog about data, statistics, algorithms, engineering, and leadership. Built with [Astro](https://astro.build) and deployed on Netlify.
+
+## Stack
+
+- Astro with MDX for posts
+- Tailwind CSS for styling
+- KaTeX (`remark-math` + `rehype-katex`) for math rendering
+- Shiki for code syntax highlighting
+- React, used only at build time to render icons
+
+## Getting started
 
 ```sh
-npm create astro@latest -- --template minimal
+npm install
+npm run dev
 ```
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/withastro/astro/tree/latest/examples/minimal)
-[![Open with CodeSandbox](https://assets.codesandbox.io/github/button-edit-lime.svg)](https://codesandbox.io/p/sandbox/github/withastro/astro/tree/latest/examples/minimal)
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/withastro/astro?devcontainer_path=.devcontainer/minimal/devcontainer.json)
+The dev server runs at `http://localhost:4321`.
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+| Command           | Action                                      |
+| ----------------- | ------------------------------------------- |
+| `npm install`     | Install dependencies                        |
+| `npm run dev`     | Start the dev server                        |
+| `npm run build`   | Build the production site to `./dist/`      |
+| `npm run preview` | Preview the production build locally        |
 
-## 🚀 Project Structure
+## Project structure
 
-Inside of your Astro project, you'll see the following folders and files:
-
-```text
-/
-├── public/
-├── src/
-│   └── pages/
-│       └── index.astro
-└── package.json
+```
+src/
+  content/blog/   Blog posts (.mdx)
+  content.config.ts   Blog collection schema
+  components/     Header, Footer, ImageGallery, etc.
+  layouts/        Page and blog post layouts
+  pages/          Routes (index, blog list, post pages)
+  images/         Source images, optimized at build time
+  styles/         Global styles
+public/           Static assets served as-is
 ```
 
-Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page is exposed as a route based on its file name.
+## Writing posts
 
-There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
+Add an `.mdx` file under `src/content/blog/`. Each post needs frontmatter:
 
-Any static assets, like images, can be placed in the `public/` directory.
+```yaml
+---
+title: 'Post title'
+description: 'Short summary'
+pubDate: 2025-07-15
+tags: ['statistics', 'streaming-data']
+---
+```
 
-## 🧞 Commands
+The first tag is used to group the post on the topic view of the home page.
 
-All commands are run from the root of the project, from a terminal:
+## Images
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
+Put images under `src/images/` and reference them with a root-relative path, either inline:
 
-## 👀 Want to learn more?
+```md
+![A caption](/images/my-post/figure-1.png)
+```
 
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+or through the gallery component:
+
+```jsx
+<ImageGallery images={[{ src: "/images/my-post/figure-1.png", alt: "..." }]} />
+```
+
+Images are optimized and converted to WebP automatically during the build, with width and height added to prevent layout shift. Keep the source files as PNG (or JPG); no manual conversion is needed.
+
+## Deployment
+
+`npm run build` outputs a static site to `dist/`. The included `netlify.toml` configures the Netlify build. Set the `site` value in `astro.config.mjs` to the production URL before deploying.
